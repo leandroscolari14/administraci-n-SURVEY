@@ -28,8 +28,9 @@ export default function DashboardAgrimensura() {
     tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false
   });
 
-  // Estado para nueva Medición
-  const [nuevaMedicion, setNuevaMedicion] = useState({ titulo: "", fecha: "", hora: "", ubicacion: "" });
+  // Estado para nueva Medición (Con fecha de hoy por defecto)
+  const hoy = new Date().toISOString().split('T')[0];
+  const [nuevaMedicion, setNuevaMedicion] = useState({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "" });
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -107,18 +108,26 @@ export default function DashboardAgrimensura() {
   // ---- FUNCIONES MEDICIONES ----
   const guardarMedicion = async (e: any) => {
     e.preventDefault();
-    await supabase.from("mediciones").insert([{ 
+    
+    // Acá agregamos la validación de errores por si falla
+    const { error } = await supabase.from("mediciones").insert([{ 
       titulo: nuevaMedicion.titulo, 
       fecha: nuevaMedicion.fecha, 
       hora: nuevaMedicion.hora, 
       ubicacion: nuevaMedicion.ubicacion 
     }]);
+
+    if (error) {
+      console.error(error);
+      alert(`Hubo un error al guardar: ${error.message}\n\n¿Estás seguro de que creaste la tabla 'mediciones' en Supabase?`);
+      return;
+    }
     
-    // Avisamos por Telegram de la nueva medición
+    // Avisamos por Telegram
     const [anio, mes, dia] = nuevaMedicion.fecha.split("-");
     await enviarTelegram(`📐 *NUEVA MEDICIÓN PROGRAMADA*\n\n**Expediente:** ${nuevaMedicion.titulo}\n**Fecha:** ${dia}/${mes}/${anio} a las ${nuevaMedicion.hora}hs\n**Lugar:** ${nuevaMedicion.ubicacion}`);
     
-    setNuevaMedicion({ titulo: "", fecha: "", hora: "", ubicacion: "" });
+    setNuevaMedicion({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "" });
     cargarDatos();
   };
 
@@ -137,10 +146,8 @@ export default function DashboardAgrimensura() {
   };
 
   const generarLinkCalendar = (m: any) => {
-    // Calculamos las fechas en UTC para que Google Calendar lo lea perfecto (Argentina es UTC-3)
     const fechaInicio = new Date(`${m.fecha}T${m.hora}:00-03:00`);
-    const fechaFin = new Date(fechaInicio.getTime() + (2 * 60 * 60 * 1000)); // Le sumamos 2 horas de duración
-    
+    const fechaFin = new Date(fechaInicio.getTime() + (2 * 60 * 60 * 1000));
     const formatoGCal = (date: Date) => date.toISOString().replace(/-|:|\.\d\d\d/g, "");
     
     const dates = `${formatoGCal(fechaInicio)}/${formatoGCal(fechaFin)}`;
@@ -281,8 +288,38 @@ export default function DashboardAgrimensura() {
         <div className="space-y-8">
            <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-6 rounded-xl shadow-lg flex gap-4 items-end border border-zinc-800">
             <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Expediente / Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] transition-colors" value={nuevaMedicion.titulo} onChange={e => setNuevaMedicion({...nuevaMedicion, titulo: e.target.value})} placeholder="Ej: PH DELTA"/></div>
-            <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Fecha</label><input type="date" required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] transition-colors" value={nuevaMedicion.fecha} onChange={e => setNuevaMedicion({...nuevaMedicion, fecha: e.target.value})}/></div>
-            <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Hora</label><input type="time" required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] transition-colors" value={nuevaMedicion.hora} onChange={e => setNuevaMedicion({...nuevaMedicion, hora: e.target.value})}/></div>
+            
+            {/* Campo Fecha mejorado para que abra el pop-up nativo al hacer click */}
+            <div>
+              <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Fecha</label>
+              <input 
+                type="date" 
+                required 
+                className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] transition-colors cursor-pointer" 
+                value={nuevaMedicion.fecha} 
+                onChange={e => setNuevaMedicion({...nuevaMedicion, fecha: e.target.value})}
+                onClick={(e: any) => e.target.showPicker && e.target.showPicker()}
+              />
+            </div>
+            
+            {/* Campo Hora como Desplegable cada 30min */}
+            <div>
+              <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Hora</label>
+              <select 
+                required 
+                className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] transition-colors cursor-pointer" 
+                value={nuevaMedicion.hora} 
+                onChange={e => setNuevaMedicion({...nuevaMedicion, hora: e.target.value})}
+              >
+                {Array.from({ length: 28 }).map((_, i) => {
+                  const h = Math.floor(i / 2) + 7; // Empieza a las 7 AM
+                  const m = i % 2 === 0 ? "00" : "30";
+                  const horaStr = `${h.toString().padStart(2, '0')}:${m}`;
+                  return <option key={horaStr} value={horaStr}>{horaStr} hs</option>;
+                })}
+              </select>
+            </div>
+            
             <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Opcional)</label><input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] transition-colors" value={nuevaMedicion.ubicacion} onChange={e => setNuevaMedicion({...nuevaMedicion, ubicacion: e.target.value})} placeholder="Ej: San Martin 2314"/></div>
             
             <button type="submit" className="px-6 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors bg-[#727A4E] hover:bg-[#8B9461]">AGENDAR</button>
