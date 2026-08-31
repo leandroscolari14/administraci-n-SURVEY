@@ -40,6 +40,11 @@ export default function DashboardAgrimensura() {
     if (dataFinanzas) setFinanzas(dataFinanzas);
   };
 
+  // Función para agregar puntos de miles a los números
+  const formatearPlata = (monto: any) => {
+    return new Intl.NumberFormat("es-AR").format(Number(monto));
+  };
+
   const actualizarValoresFinanza = (campo: string, valor: string) => {
     let nuevoTramite = campo === 'tramite' ? valor : nuevaFinanza.tramite;
     let nuevoEncargado = campo === 'encargado' ? valor : nuevaFinanza.encargado;
@@ -145,10 +150,12 @@ export default function DashboardAgrimensura() {
   const calcularPartes = (f: any) => {
     const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
     const limpio = Number(f.ingreso_total) - totalAportes;
+    
+    // Agregamos Math.round para evitar los infinitos decimales (.99999)
     return {
-      totalAportes,
-      limpioLeo: f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.20,
-      limpioBruno: f.encargado === "Bruno" ? limpio * 0.80 : limpio * 0.30
+      totalAportes: Math.round(totalAportes),
+      limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.20),
+      limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.80 : limpio * 0.30)
     };
   };
 
@@ -245,10 +252,12 @@ export default function DashboardAgrimensura() {
                   const partes = calcularPartes(f);
                   return (
                     <tr key={f.id} className={`border-b ${f.encargado === 'Leo' ? 'bg-[#e0f2fe]' : 'bg-[#ffe4e6]'}`}>
-                      <td className="p-4 font-bold">{f.tipo_tramite}</td><td className="p-4">{f.propietario}</td><td className="p-4 font-bold">${f.ingreso_total}</td>
-                      <td className="p-4 text-slate-600">${partes.totalAportes}</td>
-                      <td className="p-4 font-bold text-blue-800">${partes.limpioLeo}</td>
-                      <td className="p-4 font-bold text-red-800">${partes.limpioBruno}</td>
+                      <td className="p-4 font-bold">{f.tipo_tramite}</td>
+                      <td className="p-4">{f.propietario}</td>
+                      <td className="p-4 font-bold">${formatearPlata(f.ingreso_total)}</td>
+                      <td className="p-4 text-slate-600">${formatearPlata(partes.totalAportes)}</td>
+                      <td className="p-4 font-bold text-blue-800">${formatearPlata(partes.limpioLeo)}</td>
+                      <td className="p-4 font-bold text-red-800">${formatearPlata(partes.limpioBruno)}</td>
                       <td className="p-4"><button onClick={() => iniciarEdicionFinanza(f)} className="text-xl hover:scale-110 transition-transform">✏️</button></td>
                     </tr>
                   );
