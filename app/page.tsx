@@ -11,11 +11,10 @@ export default function DashboardAgrimensura() {
   const [trabajos, setTrabajos] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
 
-  // Estados Expedientes
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoId, setEditandoId] = useState<string | null>(null);
   
-  // Estados Finanzas con valores mínimos por defecto
+  // Arranca por defecto con VEP (solo 20.800 de extra)
   const [nuevaFinanza, setNuevaFinanza] = useState({ 
     tramite: "VEP", 
     propietario: "", 
@@ -24,7 +23,7 @@ export default function DashboardAgrimensura() {
     caja: 83000, 
     colegio: 69300, 
     extraLeo: 20800, 
-    extraBruno: 11700 
+    extraBruno: 0 
   });
 
   useEffect(() => {
@@ -39,15 +38,30 @@ export default function DashboardAgrimensura() {
     if (dataFinanzas) setFinanzas(dataFinanzas);
   };
 
-  // Función inteligente para cambiar extras según el encargado
-  const handleEncargadoChange = (e: any) => {
-    const seleccionado = e.target.value;
-    if (seleccionado === "Leo") {
-      setNuevaFinanza({ ...nuevaFinanza, encargado: seleccionado, extraLeo: 20800, extraBruno: 11700 });
+  // Función inteligente para detectar VEP/REP y encargado simultáneamente
+  const actualizarValores = (campo: string, valor: string) => {
+    let nuevoTramite = campo === 'tramite' ? valor : nuevaFinanza.tramite;
+    let nuevoEncargado = campo === 'encargado' ? valor : nuevaFinanza.encargado;
+    
+    let eLeo = 0;
+    let eBruno = 0;
+    // Si el texto incluye "REP" (en mayúscula o minúscula), aplica el recargo
+    const esREP = nuevoTramite.toUpperCase().includes("REP");
+    
+    if (nuevoEncargado === "Leo") {
+      eLeo = 20800;
+      eBruno = esREP ? 11700 : 0;
     } else {
-      // Si es de Bruno, ambos gastos van a Extra Bruno (20800 + 11700 = 32500)
-      setNuevaFinanza({ ...nuevaFinanza, encargado: seleccionado, extraLeo: 0, extraBruno: 32500 });
+      eLeo = 0;
+      eBruno = esREP ? (20800 + 11700) : 20800;
     }
+
+    setNuevaFinanza({
+      ...nuevaFinanza,
+      [campo]: valor,
+      extraLeo: eLeo,
+      extraBruno: eBruno
+    });
   };
 
   const guardarTrabajo = async (e: any) => {
@@ -85,8 +99,8 @@ export default function DashboardAgrimensura() {
       extra_leo: nuevaFinanza.extraLeo,
       extra_bruno: nuevaFinanza.extraBruno
     }]);
-    // Resetea con los valores por defecto
-    setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 11700 });
+    // Resetea con los valores por defecto para un VEP de Leo
+    setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
     cargarDatos();
   };
 
@@ -166,9 +180,9 @@ export default function DashboardAgrimensura() {
       {activeTab === "finanzas" && (
         <div className="space-y-6">
           <form onSubmit={agregarFinanza} className="bg-white p-4 rounded-lg shadow border grid grid-cols-4 gap-4 items-end">
-            <div><label className="text-sm font-bold">Tipo</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => setNuevaFinanza({...nuevaFinanza, tramite: e.target.value})}/></div>
+            <div><label className="text-sm font-bold">Tipo</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => actualizarValores('tramite', e.target.value)}/></div>
             <div><label className="text-sm font-bold">Propietario</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
-            <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={handleEncargadoChange}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
+            <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={e => actualizarValores('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
             <div><label className="text-sm font-bold">Ingreso Total ($)</label><input type="number" required className="w-full border p-2 rounded" value={nuevaFinanza.ingreso} onChange={e => setNuevaFinanza({...nuevaFinanza, ingreso: Number(e.target.value)})}/></div>
             
             <div><label className="text-sm font-bold">Caja ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.caja} onChange={e => setNuevaFinanza({...nuevaFinanza, caja: Number(e.target.value)})}/></div>
