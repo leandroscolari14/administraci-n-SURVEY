@@ -7,14 +7,25 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function DashboardAgrimensura() {
-  const [activeTab, setActiveTab] = useState("trabajos");
+  const [activeTab, setActiveTab] = useState("finanzas");
   const [trabajos, setTrabajos] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
 
-  // Modificamos el estado para incluir "encargado" y saber si estamos editando
+  // Estados Expedientes
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [nuevaFinanza, setNuevaFinanza] = useState({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 0, colegio: 0, extras: 0 });
+  
+  // Estados Finanzas con valores mínimos por defecto
+  const [nuevaFinanza, setNuevaFinanza] = useState({ 
+    tramite: "VEP", 
+    propietario: "", 
+    encargado: "Leo", 
+    ingreso: 0, 
+    caja: 83000, 
+    colegio: 69300, 
+    extraLeo: 20800, 
+    extraBruno: 11700 
+  });
 
   useEffect(() => {
     cargarDatos();
@@ -28,23 +39,29 @@ export default function DashboardAgrimensura() {
     if (dataFinanzas) setFinanzas(dataFinanzas);
   };
 
-  // Función unificada para Agregar o Guardar Edición
+  // Función inteligente para cambiar extras según el encargado
+  const handleEncargadoChange = (e: any) => {
+    const seleccionado = e.target.value;
+    if (seleccionado === "Leo") {
+      setNuevaFinanza({ ...nuevaFinanza, encargado: seleccionado, extraLeo: 20800, extraBruno: 11700 });
+    } else {
+      // Si es de Bruno, ambos gastos van a Extra Bruno (20800 + 11700 = 32500)
+      setNuevaFinanza({ ...nuevaFinanza, encargado: seleccionado, extraLeo: 0, extraBruno: 32500 });
+    }
+  };
+
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
     if (editandoId) {
       await supabase.from("trabajos_curso").update({
-        nombre_expediente: nuevoTrabajo.nombre,
-        estado_detalle: nuevoTrabajo.estado,
-        color_alerta: nuevoTrabajo.color,
-        encargado: nuevoTrabajo.encargado
+        nombre_expediente: nuevoTrabajo.nombre, estado_detalle: nuevoTrabajo.estado,
+        color_alerta: nuevoTrabajo.color, encargado: nuevoTrabajo.encargado
       }).eq("id", editandoId);
       setEditandoId(null);
     } else {
       await supabase.from("trabajos_curso").insert([{
-        nombre_expediente: nuevoTrabajo.nombre,
-        estado_detalle: nuevoTrabajo.estado,
-        color_alerta: nuevoTrabajo.color,
-        encargado: nuevoTrabajo.encargado
+        nombre_expediente: nuevoTrabajo.nombre, estado_detalle: nuevoTrabajo.estado,
+        color_alerta: nuevoTrabajo.color, encargado: nuevoTrabajo.encargado
       }]);
     }
     setNuevoTrabajo({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
@@ -59,10 +76,17 @@ export default function DashboardAgrimensura() {
   const agregarFinanza = async (e: any) => {
     e.preventDefault();
     await supabase.from("finanzas").insert([{
-      tipo_tramite: nuevaFinanza.tramite, propietario: nuevaFinanza.propietario, encargado: nuevaFinanza.encargado,
-      ingreso_total: nuevaFinanza.ingreso, caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extras: nuevaFinanza.extras
+      tipo_tramite: nuevaFinanza.tramite, 
+      propietario: nuevaFinanza.propietario, 
+      encargado: nuevaFinanza.encargado,
+      ingreso_total: nuevaFinanza.ingreso, 
+      caja: nuevaFinanza.caja, 
+      colegio: nuevaFinanza.colegio, 
+      extra_leo: nuevaFinanza.extraLeo,
+      extra_bruno: nuevaFinanza.extraBruno
     }]);
-    setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 0, colegio: 0, extras: 0 });
+    // Resetea con los valores por defecto
+    setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 11700 });
     cargarDatos();
   };
 
@@ -76,7 +100,7 @@ export default function DashboardAgrimensura() {
   };
 
   const calcularPartes = (f: any) => {
-    const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extras);
+    const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
     const limpio = Number(f.ingreso_total) - totalAportes;
     return {
       totalAportes,
@@ -111,7 +135,6 @@ export default function DashboardAgrimensura() {
           </form>
 
           <div className="grid grid-cols-2 gap-8">
-            {/* Tabla LEO */}
             <div className="bg-white rounded-lg shadow border overflow-hidden">
               <div className="bg-[#e0f2fe] p-3 border-b border-slate-200"><h3 className="font-bold text-blue-900 text-lg">Expedientes Leo</h3></div>
               <table className="w-full text-left border-collapse">
@@ -124,7 +147,6 @@ export default function DashboardAgrimensura() {
               </table>
             </div>
 
-            {/* Tabla BRUNO */}
             <div className="bg-white rounded-lg shadow border overflow-hidden">
               <div className="bg-[#ffe4e6] p-3 border-b border-slate-200"><h3 className="font-bold text-red-900 text-lg">Expedientes Bruno</h3></div>
               <table className="w-full text-left border-collapse">
@@ -140,18 +162,23 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: FINANZAS (Se mantiene igual que antes) */}
+      {/* PESTAÑA: FINANZAS */}
       {activeTab === "finanzas" && (
         <div className="space-y-6">
           <form onSubmit={agregarFinanza} className="bg-white p-4 rounded-lg shadow border grid grid-cols-4 gap-4 items-end">
             <div><label className="text-sm font-bold">Tipo</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => setNuevaFinanza({...nuevaFinanza, tramite: e.target.value})}/></div>
             <div><label className="text-sm font-bold">Propietario</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
-            <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={e => setNuevaFinanza({...nuevaFinanza, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
+            <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={handleEncargadoChange}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
             <div><label className="text-sm font-bold">Ingreso Total ($)</label><input type="number" required className="w-full border p-2 rounded" value={nuevaFinanza.ingreso} onChange={e => setNuevaFinanza({...nuevaFinanza, ingreso: Number(e.target.value)})}/></div>
+            
             <div><label className="text-sm font-bold">Caja ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.caja} onChange={e => setNuevaFinanza({...nuevaFinanza, caja: Number(e.target.value)})}/></div>
             <div><label className="text-sm font-bold">Colegio ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.colegio} onChange={e => setNuevaFinanza({...nuevaFinanza, colegio: Number(e.target.value)})}/></div>
-            <div><label className="text-sm font-bold">Extras ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.extras} onChange={e => setNuevaFinanza({...nuevaFinanza, extras: Number(e.target.value)})}/></div>
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded font-bold">Cargar Ingreso</button>
+            <div><label className="text-sm font-bold">Extra Leo ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.extraLeo} onChange={e => setNuevaFinanza({...nuevaFinanza, extraLeo: Number(e.target.value)})}/></div>
+            <div><label className="text-sm font-bold">Extra Bruno ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.extraBruno} onChange={e => setNuevaFinanza({...nuevaFinanza, extraBruno: Number(e.target.value)})}/></div>
+            
+            <div className="col-span-4 flex justify-end mt-2">
+              <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700">Cargar Ingreso</button>
+            </div>
           </form>
 
           <div className="flex justify-end">
@@ -162,7 +189,7 @@ export default function DashboardAgrimensura() {
             <table className="w-full text-left whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100 uppercase text-xs border-b">
-                  <th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Total</th><th className="p-4">Gastos</th><th className="p-4 text-blue-700">Limpio Leo</th><th className="p-4 text-red-700">Limpio Bruno</th>
+                  <th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Total</th><th className="p-4">Gastos (Total)</th><th className="p-4 text-blue-700">Limpio Leo</th><th className="p-4 text-red-700">Limpio Bruno</th>
                 </tr>
               </thead>
               <tbody>
