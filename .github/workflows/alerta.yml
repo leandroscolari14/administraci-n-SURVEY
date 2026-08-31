@@ -1,0 +1,14 @@
+name: Alarma Catastro
+
+on:
+  schedule:
+    # Esto le dice a GitHub que ejecute el archivo en el minuto 00 y el minuto 30 de cada hora
+    - cron: '0,30 * * * *'
+  workflow_dispatch: # Nos permite probarlo a mano si queremos
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a la API de alerta
+        run: curl -s "https://administraci-n-survey.vercel.app/api/alerta"
