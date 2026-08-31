@@ -11,10 +11,12 @@ export default function DashboardAgrimensura() {
   const [trabajos, setTrabajos] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
 
+  // Estados Trabajos
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
-  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   
-  // Arranca por defecto con VEP (solo 20.800 de extra)
+  // Estados Finanzas
+  const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
   const [nuevaFinanza, setNuevaFinanza] = useState({ 
     tramite: "VEP", 
     propietario: "", 
@@ -38,14 +40,12 @@ export default function DashboardAgrimensura() {
     if (dataFinanzas) setFinanzas(dataFinanzas);
   };
 
-  // Función inteligente para detectar VEP/REP y encargado simultáneamente
-  const actualizarValores = (campo: string, valor: string) => {
+  const actualizarValoresFinanza = (campo: string, valor: string) => {
     let nuevoTramite = campo === 'tramite' ? valor : nuevaFinanza.tramite;
     let nuevoEncargado = campo === 'encargado' ? valor : nuevaFinanza.encargado;
     
     let eLeo = 0;
     let eBruno = 0;
-    // Si el texto incluye "REP" (en mayúscula o minúscula), aplica el recargo
     const esREP = nuevoTramite.toUpperCase().includes("REP");
     
     if (nuevoEncargado === "Leo") {
@@ -64,14 +64,15 @@ export default function DashboardAgrimensura() {
     });
   };
 
+  // ---- FUNCIONES DE TRABAJOS ----
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
-    if (editandoId) {
+    if (editandoTrabajoId) {
       await supabase.from("trabajos_curso").update({
         nombre_expediente: nuevoTrabajo.nombre, estado_detalle: nuevoTrabajo.estado,
         color_alerta: nuevoTrabajo.color, encargado: nuevoTrabajo.encargado
-      }).eq("id", editandoId);
-      setEditandoId(null);
+      }).eq("id", editandoTrabajoId);
+      setEditandoTrabajoId(null);
     } else {
       await supabase.from("trabajos_curso").insert([{
         nombre_expediente: nuevoTrabajo.nombre, estado_detalle: nuevoTrabajo.estado,
@@ -82,26 +83,54 @@ export default function DashboardAgrimensura() {
     cargarDatos();
   };
 
-  const iniciarEdicion = (t: any) => {
-    setEditandoId(t.id);
+  const iniciarEdicionTrabajo = (t: any) => {
+    setEditandoTrabajoId(t.id);
     setNuevoTrabajo({ nombre: t.nombre_expediente, estado: t.estado_detalle, color: t.color_alerta, encargado: t.encargado || "Leo" });
   };
 
-  const agregarFinanza = async (e: any) => {
+  // ---- FUNCIONES DE FINANZAS ----
+  const guardarFinanza = async (e: any) => {
     e.preventDefault();
-    await supabase.from("finanzas").insert([{
-      tipo_tramite: nuevaFinanza.tramite, 
-      propietario: nuevaFinanza.propietario, 
-      encargado: nuevaFinanza.encargado,
-      ingreso_total: nuevaFinanza.ingreso, 
-      caja: nuevaFinanza.caja, 
-      colegio: nuevaFinanza.colegio, 
-      extra_leo: nuevaFinanza.extraLeo,
-      extra_bruno: nuevaFinanza.extraBruno
-    }]);
-    // Resetea con los valores por defecto para un VEP de Leo
+    if (editandoFinanzaId) {
+      await supabase.from("finanzas").update({
+        tipo_tramite: nuevaFinanza.tramite, 
+        propietario: nuevaFinanza.propietario, 
+        encargado: nuevaFinanza.encargado,
+        ingreso_total: nuevaFinanza.ingreso, 
+        caja: nuevaFinanza.caja, 
+        colegio: nuevaFinanza.colegio, 
+        extra_leo: nuevaFinanza.extraLeo,
+        extra_bruno: nuevaFinanza.extraBruno
+      }).eq("id", editandoFinanzaId);
+      setEditandoFinanzaId(null);
+    } else {
+      await supabase.from("finanzas").insert([{
+        tipo_tramite: nuevaFinanza.tramite, 
+        propietario: nuevaFinanza.propietario, 
+        encargado: nuevaFinanza.encargado,
+        ingreso_total: nuevaFinanza.ingreso, 
+        caja: nuevaFinanza.caja, 
+        colegio: nuevaFinanza.colegio, 
+        extra_leo: nuevaFinanza.extraLeo,
+        extra_bruno: nuevaFinanza.extraBruno
+      }]);
+    }
     setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
     cargarDatos();
+  };
+
+  const iniciarEdicionFinanza = (f: any) => {
+    setEditandoFinanzaId(f.id);
+    setNuevaFinanza({ 
+      tramite: f.tipo_tramite, 
+      propietario: f.propietario, 
+      encargado: f.encargado, 
+      ingreso: Number(f.ingreso_total), 
+      caja: Number(f.caja), 
+      colegio: Number(f.colegio), 
+      extraLeo: Number(f.extra_leo || 0), 
+      extraBruno: Number(f.extra_bruno || 0) 
+    });
   };
 
   const liquidarSemana = async () => {
@@ -144,8 +173,8 @@ export default function DashboardAgrimensura() {
             <div className="flex-1"><label className="text-sm font-bold">Estado</label><input required className="w-full border p-2 rounded" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando Muni"/></div>
             <div><label className="text-sm font-bold">Encargado</label><select className="w-full border p-2 rounded" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
             <div><label className="text-sm font-bold">Alerta</label><select className="w-full border p-2 rounded" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Verde (Ingresado)</option><option value="amarillo">Amarillo (Pendiente)</option></select></div>
-            <button type="submit" className={`px-4 py-2 rounded font-bold text-white ${editandoId ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editandoId ? "Guardar Edición" : "Agregar"}</button>
-            {editandoId && <button type="button" onClick={() => {setEditandoId(null); setNuevoTrabajo({ nombre: "", estado: "", color: "verde", encargado: "Leo" });}} className="px-4 py-2 rounded font-bold text-slate-600 bg-slate-200 hover:bg-slate-300">Cancelar</button>}
+            <button type="submit" className={`px-4 py-2 rounded font-bold text-white ${editandoTrabajoId ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editandoTrabajoId ? "Guardar Edición" : "Agregar"}</button>
+            {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ nombre: "", estado: "", color: "verde", encargado: "Leo" });}} className="px-4 py-2 rounded font-bold text-slate-600 bg-slate-200 hover:bg-slate-300">Cancelar</button>}
           </form>
 
           <div className="grid grid-cols-2 gap-8">
@@ -155,7 +184,7 @@ export default function DashboardAgrimensura() {
                 <thead><tr className="bg-slate-50 uppercase text-xs text-slate-500"><th className="p-3 border-b">Expediente</th><th className="p-3 border-b">Estado</th><th className="p-3 border-b w-16">Acción</th></tr></thead>
                 <tbody>
                   {trabajosLeo.map(t => (
-                    <tr key={t.id} className="border-b"><td className="p-3 font-bold">{t.nombre_expediente}</td><td className={`p-3 text-sm font-medium ${t.color_alerta === 'verde' ? 'bg-[#c6f6d5]' : 'bg-[#fefcbf]'}`}>{t.estado_detalle}</td><td className="p-3"><button onClick={() => iniciarEdicion(t)} className="text-xl hover:scale-110 transition-transform">✏️</button></td></tr>
+                    <tr key={t.id} className="border-b"><td className="p-3 font-bold">{t.nombre_expediente}</td><td className={`p-3 text-sm font-medium ${t.color_alerta === 'verde' ? 'bg-[#c6f6d5]' : 'bg-[#fefcbf]'}`}>{t.estado_detalle}</td><td className="p-3"><button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl hover:scale-110 transition-transform">✏️</button></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -167,7 +196,7 @@ export default function DashboardAgrimensura() {
                 <thead><tr className="bg-slate-50 uppercase text-xs text-slate-500"><th className="p-3 border-b">Expediente</th><th className="p-3 border-b">Estado</th><th className="p-3 border-b w-16">Acción</th></tr></thead>
                 <tbody>
                   {trabajosBruno.map(t => (
-                    <tr key={t.id} className="border-b"><td className="p-3 font-bold">{t.nombre_expediente}</td><td className={`p-3 text-sm font-medium ${t.color_alerta === 'verde' ? 'bg-[#c6f6d5]' : 'bg-[#fefcbf]'}`}>{t.estado_detalle}</td><td className="p-3"><button onClick={() => iniciarEdicion(t)} className="text-xl hover:scale-110 transition-transform">✏️</button></td></tr>
+                    <tr key={t.id} className="border-b"><td className="p-3 font-bold">{t.nombre_expediente}</td><td className={`p-3 text-sm font-medium ${t.color_alerta === 'verde' ? 'bg-[#c6f6d5]' : 'bg-[#fefcbf]'}`}>{t.estado_detalle}</td><td className="p-3"><button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl hover:scale-110 transition-transform">✏️</button></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -179,7 +208,7 @@ export default function DashboardAgrimensura() {
       {/* PESTAÑA: FINANZAS */}
       {activeTab === "finanzas" && (
         <div className="space-y-6">
-          <form onSubmit={agregarFinanza} className="bg-white p-4 rounded-lg shadow border grid grid-cols-4 gap-4 items-end">
+          <form onSubmit={guardarFinanza} className="bg-white p-4 rounded-lg shadow border grid grid-cols-4 gap-4 items-end">
             <div><label className="text-sm font-bold">Tipo</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => actualizarValores('tramite', e.target.value)}/></div>
             <div><label className="text-sm font-bold">Propietario</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
             <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={e => actualizarValores('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
@@ -190,8 +219,13 @@ export default function DashboardAgrimensura() {
             <div><label className="text-sm font-bold">Extra Leo ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.extraLeo} onChange={e => setNuevaFinanza({...nuevaFinanza, extraLeo: Number(e.target.value)})}/></div>
             <div><label className="text-sm font-bold">Extra Bruno ($)</label><input type="number" className="w-full border p-2 rounded" value={nuevaFinanza.extraBruno} onChange={e => setNuevaFinanza({...nuevaFinanza, extraBruno: Number(e.target.value)})}/></div>
             
-            <div className="col-span-4 flex justify-end mt-2">
-              <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700">Cargar Ingreso</button>
+            <div className="col-span-4 flex justify-end gap-2 mt-2">
+              {editandoFinanzaId && (
+                <button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });}} className="px-6 py-2 rounded font-bold text-slate-600 bg-slate-200 hover:bg-slate-300">Cancelar</button>
+              )}
+              <button type="submit" className={`px-6 py-2 rounded font-bold text-white ${editandoFinanzaId ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                {editandoFinanzaId ? "Guardar Edición" : "Cargar Ingreso"}
+              </button>
             </div>
           </form>
 
@@ -203,7 +237,7 @@ export default function DashboardAgrimensura() {
             <table className="w-full text-left whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100 uppercase text-xs border-b">
-                  <th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Total</th><th className="p-4">Gastos (Total)</th><th className="p-4 text-blue-700">Limpio Leo</th><th className="p-4 text-red-700">Limpio Bruno</th>
+                  <th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Total</th><th className="p-4">Gastos</th><th className="p-4 text-blue-700">Limpio Leo</th><th className="p-4 text-red-700">Limpio Bruno</th><th className="p-4 w-16">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -215,6 +249,7 @@ export default function DashboardAgrimensura() {
                       <td className="p-4 text-slate-600">${partes.totalAportes}</td>
                       <td className="p-4 font-bold text-blue-800">${partes.limpioLeo}</td>
                       <td className="p-4 font-bold text-red-800">${partes.limpioBruno}</td>
+                      <td className="p-4"><button onClick={() => iniciarEdicionFinanza(f)} className="text-xl hover:scale-110 transition-transform">✏️</button></td>
                     </tr>
                   );
                 })}
