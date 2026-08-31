@@ -12,6 +12,10 @@ export default function DashboardAgrimensura() {
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
   
+  // Estado para Catastro
+  const [catastro, setCatastro] = useState({ usuario: "Libre", fecha: "" });
+  const [tiempoUso, setTiempoUso] = useState("");
+
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   const tipoInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,16 +31,54 @@ export default function DashboardAgrimensura() {
     cargarDatos();
   }, []);
 
+  // Efecto para el cronómetro de Catastro
+  useEffect(() => {
+    let intervalo: any;
+    if (catastro.usuario !== "Libre" && catastro.fecha) {
+      intervalo = setInterval(() => {
+        const ahora = new Date().getTime();
+        const inicio = new Date(catastro.fecha).getTime();
+        const diferencia = ahora - inicio;
+        
+        const horas = Math.floor((diferencia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
+        const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
+        
+        setTiempoUso(`${horas}h ${minutos}m ${segundos}s`);
+      }, 1000);
+    } else {
+      setTiempoUso("");
+    }
+    return () => clearInterval(intervalo);
+  }, [catastro]);
+
   const cargarDatos = async () => {
     const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
+    const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
     if (dataTrabajos) setTrabajos(dataTrabajos);
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
+    if (dataCatastro && dataCatastro.length > 0) {
+      setCatastro({ usuario: dataCatastro[0].usuario, fecha: dataCatastro[0].fecha_actualizacion });
+    }
   };
 
+  // ---- FUNCIONES CATASTRO ----
+  const tomarCatastro = async (nombre: string) => {
+    const nuevaFecha = new Date().toISOString();
+    await supabase.from("estado_catastro").update({ usuario: nombre, fecha_actualizacion: nuevaFecha }).eq("id", 1);
+    cargarDatos();
+  };
+
+  const liberarCatastro = async () => {
+    await supabase.from("estado_catastro").update({ usuario: "Libre", fecha_actualizacion: new Date().toISOString() }).eq("id", 1);
+    cargarDatos();
+  };
+
+  // ---- FUNCIONES GENERALES ----
   const formatearPlata = (monto: any) => new Intl.NumberFormat("es-AR").format(Number(monto));
 
   const handlePlataInput = (campo: string, valorStr: string) => {
@@ -47,16 +89,10 @@ export default function DashboardAgrimensura() {
   const actualizarValoresFinanza = (campo: string, valor: string) => {
     let nuevoTramite = campo === 'tramite' ? valor : nuevaFinanza.tramite;
     let nuevoEncargado = campo === 'encargado' ? valor : nuevaFinanza.encargado;
-    
     let eLeo = 0, eBruno = 0;
     const esREP = nuevoTramite.toUpperCase().includes("REP");
-    
-    if (nuevoEncargado === "Leo") {
-      eLeo = 20800; eBruno = esREP ? 11700 : 0;
-    } else {
-      eLeo = 0; eBruno = esREP ? (20800 + 11700) : 20800;
-    }
-
+    if (nuevoEncargado === "Leo") { eLeo = 20800; eBruno = esREP ? 11700 : 0; } 
+    else { eLeo = 0; eBruno = esREP ? (20800 + 11700) : 20800; }
     setNuevaFinanza({ ...nuevaFinanza, [campo]: valor, extraLeo: eLeo, extraBruno: eBruno });
   };
 
@@ -68,7 +104,6 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  // ---- FUNCIONES TRABAJOS ----
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
     if (editandoTrabajoId) {
@@ -86,7 +121,6 @@ export default function DashboardAgrimensura() {
     setNuevoTrabajo({ nombre: t.nombre_expediente, estado: t.estado_detalle, color: t.color_alerta, encargado: t.encargado || "Leo" });
   };
 
-  // ---- FUNCIONES FINANZAS ----
   const guardarFinanza = async (e: any) => {
     e.preventDefault();
     const datosGuardar = {
@@ -94,7 +128,6 @@ export default function DashboardAgrimensura() {
       ingreso_total: nuevaFinanza.ingreso, caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, 
       extra_leo: nuevaFinanza.extraLeo, extra_bruno: nuevaFinanza.extraBruno, es_gasto_5050: nuevaFinanza.esGasto5050
     };
-
     if (editandoFinanzaId) {
       await supabase.from("finanzas").update(datosGuardar).eq("id", editandoFinanzaId);
       setEditandoFinanzaId(null);
@@ -108,11 +141,7 @@ export default function DashboardAgrimensura() {
 
   const iniciarEdicionFinanza = (f: any) => {
     setEditandoFinanzaId(f.id);
-    setNuevaFinanza({ 
-      tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, 
-      ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), 
-      extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false
-    });
+    setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false });
   };
 
   const eliminarFinanza = async (id: string) => {
@@ -123,24 +152,20 @@ export default function DashboardAgrimensura() {
   };
 
   const liquidarSemana = async () => {
-    if (finanzas.length === 0) return alert("No hay trabajos pendientes para liquidar esta semana.");
+    if (finanzas.length === 0) return alert("No hay trabajos pendientes para liquidar.");
     if (confirm("¿Estás seguro de liquidar? Se cerrarán las cuentas y los trabajos pasarán al historial.")) {
       const ids = finanzas.map(f => f.id);
-      const fechaCierre = new Date().toISOString(); 
-      await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: fechaCierre }).in("id", ids);
+      await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: new Date().toISOString() }).in("id", ids);
       cargarDatos();
-      alert("¡Semana liquidada con éxito! Cuentas en 0.");
+      alert("¡Semana liquidada con éxito!");
     }
   };
 
   const reabrirSemana = async (fechaKey: string) => {
     if (finanzas.length > 0) return alert("⚠️ Tenés una semana en curso actualmente. Para reabrir una vieja, primero liquidá o borrá los datos de la 'Semana Actual'.");
     if (confirm("¿Querés reabrir esta semana? Pasará a 'Semana Actual' para editarse.")) {
-      if (fechaKey === "anterior") {
-        await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true);
-      } else {
-        await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey);
-      }
+      if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true);
+      else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey);
       await cargarDatos();
       setActiveTab("finanzas");
     }
@@ -148,74 +173,36 @@ export default function DashboardAgrimensura() {
 
   const eliminarSemana = async (fechaKey: string) => {
     if (confirm("🚨 ATENCIÓN: ¿Estás seguro de borrar COMPLETAMENTE esta semana del historial?")) {
-      if (fechaKey === "anterior") {
-        await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true);
-      } else {
-        await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey);
-      }
+      if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true);
+      else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey);
       cargarDatos();
     }
   };
 
-  // ---- NUEVA CALCULADORA EXACTA AL EXCEL ----
   const calcularPartes = (f: any) => {
-    if (f.es_gasto_5050) {
-      return { totalAportes: Number(f.caja), limpioLeo: 0, limpioBruno: 0 }; // Visualmente el limpio queda en 0
-    } else {
-      const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
-      const limpio = Number(f.ingreso_total) - totalAportes;
-      return {
-        totalAportes: Math.round(totalAportes),
-        limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.20),
-        limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.80 : limpio * 0.30)
-      };
-    }
+    if (f.es_gasto_5050) return { totalAportes: Number(f.caja), limpioLeo: 0, limpioBruno: 0 };
+    const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
+    const limpio = Number(f.ingreso_total) - totalAportes;
+    return { totalAportes: Math.round(totalAportes), limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.20), limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.80 : limpio * 0.30) };
   };
 
   const generarResumen = (lista: any[]) => {
-    let cobradoLeo = 0, cobradoBruno = 0;
-    let gastosSalientesLeo = 0, gastosSalientesBruno = 0;
-    let gananciaPuraLeo = 0, gananciaPuraBruno = 0;
-    let deuda5050Leo = 0, deuda5050Bruno = 0;
-
+    let cobradoLeo = 0, cobradoBruno = 0, gastosSalientesLeo = 0, gastosSalientesBruno = 0, gananciaPuraLeo = 0, gananciaPuraBruno = 0, deuda5050Leo = 0, deuda5050Bruno = 0;
     lista.forEach(f => {
       if (f.es_gasto_5050) {
         const gasto = Number(f.caja);
-        const mitad = gasto / 2;
-        deuda5050Leo += mitad;
-        deuda5050Bruno += mitad;
-        if (f.encargado === "Leo") gastosSalientesLeo += gasto; // Leo pagó de su bolsillo
-        else gastosSalientesBruno += gasto; // Bruno pagó de su bolsillo
+        deuda5050Leo += gasto / 2; deuda5050Bruno += gasto / 2;
+        if (f.encargado === "Leo") gastosSalientesLeo += gasto; else gastosSalientesBruno += gasto;
       } else {
         const partes = calcularPartes(f);
-        gananciaPuraLeo += partes.limpioLeo;
-        gananciaPuraBruno += partes.limpioBruno;
-        if (f.encargado === "Leo") {
-          cobradoLeo += Number(f.ingreso_total);
-          gastosSalientesLeo += partes.totalAportes;
-        } else {
-          cobradoBruno += Number(f.ingreso_total);
-          gastosSalientesBruno += partes.totalAportes;
-        }
+        gananciaPuraLeo += partes.limpioLeo; gananciaPuraBruno += partes.limpioBruno;
+        if (f.encargado === "Leo") { cobradoLeo += Number(f.ingreso_total); gastosSalientesLeo += partes.totalAportes; } 
+        else { cobradoBruno += Number(f.ingreso_total); gastosSalientesBruno += partes.totalAportes; }
       }
     });
-
-    // Matemática infalible de caja
-    const cajaFisicaLeo = cobradoLeo - gastosSalientesLeo;
-    const cajaFisicaBruno = cobradoBruno - gastosSalientesBruno;
-    
-    // Lo que cada uno DEBE tener en su bolsillo (Ganancias puras - Lo que debe de los 50/50)
-    const mereceLeo = gananciaPuraLeo - deuda5050Leo;
-    const mereceBruno = gananciaPuraBruno - deuda5050Bruno;
-
-    // Balance (Lo que tiene en el bolsillo VS lo que debería tener)
-    const balanceLeo = cajaFisicaLeo - mereceLeo;
-    const balanceBruno = cajaFisicaBruno - mereceBruno;
-
-    return {
-      cobradoLeo, limpioLeoTotal: gananciaPuraLeo, gastosLeo: gastosSalientesLeo, balanceLeo,
-      cobradoBruno, limpioBrunoTotal: gananciaPuraBruno, gastosBruno: gastosSalientesBruno, balanceBruno
-    };
+    const cajaFisicaLeo = cobradoLeo - gastosSalientesLeo; const cajaFisicaBruno = cobradoBruno - gastosSalientesBruno;
+    const mereceLeo = gananciaPuraLeo - deuda5050Leo; const mereceBruno = gananciaPuraBruno - deuda5050Bruno;
+    return { cobradoLeo, limpioLeoTotal: gananciaPuraLeo, gastosLeo: gastosSalientesLeo, balanceLeo: cajaFisicaLeo - mereceLeo, cobradoBruno, limpioBrunoTotal: gananciaPuraBruno, gastosBruno: gastosSalientesBruno, balanceBruno: cajaFisicaBruno - mereceBruno };
   };
 
   const resumenActual = generarResumen(finanzas);
@@ -224,20 +211,13 @@ export default function DashboardAgrimensura() {
 
   const historialAgrupado = historial.reduce((acc, item) => {
     const key = item.fecha_liquidacion || "anterior";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
+    if (!acc[key]) acc[key] = []; acc[key].push(item); return acc;
   }, {});
-
   const fechasOrdenadas = Object.keys(historialAgrupado).sort((a, b) => {
-    if (a === "anterior") return 1;
-    if (b === "anterior") return -1;
+    if (a === "anterior") return 1; if (b === "anterior") return -1;
     return new Date(b).getTime() - new Date(a).getTime();
   });
-
-  const toggleHistorial = (fechaKey: string) => {
-    setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
-  };
+  const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-800">
@@ -247,8 +227,43 @@ export default function DashboardAgrimensura() {
           <button onClick={() => setActiveTab("trabajos")} className={`px-4 py-2 rounded-md font-semibold ${activeTab === "trabajos" ? "bg-slate-800 text-white" : "bg-white border text-slate-600"}`}>Expedientes en Curso</button>
           <button onClick={() => setActiveTab("finanzas")} className={`px-4 py-2 rounded-md font-semibold ${activeTab === "finanzas" ? "bg-slate-800 text-white" : "bg-white border text-slate-600"}`}>Finanzas (Semana Actual)</button>
           <button onClick={() => setActiveTab("historial")} className={`px-4 py-2 rounded-md font-semibold ${activeTab === "historial" ? "bg-slate-800 text-white" : "bg-white border text-slate-600"}`}>Historial</button>
+          <button onClick={() => setActiveTab("catastro")} className={`px-4 py-2 rounded-md font-bold shadow-sm transition-colors ${activeTab === "catastro" ? "bg-indigo-600 text-white" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>🔑 Sistema Catastro</button>
         </div>
       </header>
+
+      {/* PESTAÑA: CATASTRO */}
+      {activeTab === "catastro" && (
+        <div className="flex flex-col items-center justify-center pt-10">
+          <div className={`p-12 rounded-3xl shadow-2xl w-full max-w-2xl text-center border-4 ${catastro.usuario === 'Libre' ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+            <h2 className="text-2xl font-bold text-slate-500 mb-2">Estado del Sistema Catastro</h2>
+            
+            <div className={`text-6xl font-black mb-6 uppercase tracking-wider ${catastro.usuario === 'Libre' ? 'text-green-600' : 'text-red-600'}`}>
+              {catastro.usuario === 'Libre' ? '✅ LIBRE' : `🚫 EN USO POR ${catastro.usuario}`}
+            </div>
+
+            {catastro.usuario !== "Libre" && (
+              <div className="text-xl font-bold text-slate-600 mb-8 bg-white py-3 px-6 rounded-xl shadow-sm inline-block">
+                ⏱️ Tiempo en uso: <span className="text-red-500">{tiempoUso}</span>
+              </div>
+            )}
+
+            <div className="flex gap-4 justify-center mt-4">
+              {catastro.usuario === "Libre" ? (
+                <>
+                  <button onClick={() => tomarCatastro("Leo")} className="bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold px-8 py-4 rounded-xl shadow-lg transition-transform hover:scale-105">🙋‍♂️ Usar (Leo)</button>
+                  <button onClick={() => tomarCatastro("Bruno")} className="bg-red-600 hover:bg-red-700 text-white text-xl font-bold px-8 py-4 rounded-xl shadow-lg transition-transform hover:scale-105">🙋‍♂️ Usar (Bruno)</button>
+                </>
+              ) : (
+                <button onClick={liberarCatastro} className="bg-green-500 hover:bg-green-600 text-white text-2xl font-black px-12 py-5 rounded-xl shadow-lg transition-transform hover:scale-105 w-full">🔓 LIBERAR SISTEMA</button>
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-8 text-slate-500 text-sm max-w-lg text-center">
+             💡 Si ves que pasaron muchas horas, es probable que se lo hayan olvidado abierto. Podés hablarle a tu socio o simplemente tomar el turno si sabés que no está trabajando.
+          </div>
+        </div>
+      )}
 
       {/* PESTAÑA: TRABAJOS EN CURSO */}
       {activeTab === "trabajos" && (
@@ -370,7 +385,7 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: HISTORIAL CON ACORDEON Y RESUMENES */}
+      {/* PESTAÑA: HISTORIAL */}
       {activeTab === "historial" && (
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-slate-800 mb-6">Trabajos Liquidados</h2>
