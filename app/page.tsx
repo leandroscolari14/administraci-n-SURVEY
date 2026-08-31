@@ -155,7 +155,10 @@ export default function DashboardAgrimensura() {
     const loc = encodeURIComponent(m.ubicacion);
     const details = encodeURIComponent(`Turno de medición programado desde el sistema SURVEY.`);
     
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&location=${loc}&details=${details}`;
+    // ACÁ PONÉS LOS CORREOS REALES DE USTEDES SEPARADOS POR COMA
+    const invitados = "brunoverga13@gmail.com,leandroscolari14@gmail.com"; 
+    
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&location=${loc}&details=${details}&add=${invitados}`;
   };
 
   const guardarTrabajo = async (e: any) => {
