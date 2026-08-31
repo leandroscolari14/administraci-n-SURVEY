@@ -12,17 +12,13 @@ export default function DashboardAgrimensura() {
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
   
-  // Estado para manejar qué semanas están abiertas en el historial
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
-
   const tipoInputRef = useRef<HTMLInputElement>(null);
 
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
-  
-  // Agregamos el estado esGasto5050
   const [nuevaFinanza, setNuevaFinanza] = useState({ 
     tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false
   });
@@ -43,9 +39,8 @@ export default function DashboardAgrimensura() {
 
   const formatearPlata = (monto: any) => new Intl.NumberFormat("es-AR").format(Number(monto));
 
-  // Función para manejar el tipeo con formato de miles
   const handlePlataInput = (campo: string, valorStr: string) => {
-    const valorLimpio = valorStr.replace(/\D/g, ''); // Deja solo los números
+    const valorLimpio = valorStr.replace(/\D/g, ''); 
     setNuevaFinanza({ ...nuevaFinanza, [campo]: Number(valorLimpio) });
   };
 
@@ -112,13 +107,17 @@ export default function DashboardAgrimensura() {
     setTimeout(() => { tipoInputRef.current?.focus(); }, 100);
   };
 
-  const iniciarEdicionFinanza = (f: any) => {
+  const iniciarEdicionFinanza = (f: any, desdeHistorial: boolean = false) => {
     setEditandoFinanzaId(f.id);
     setNuevaFinanza({ 
       tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, 
       ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), 
       extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false
     });
+    if (desdeHistorial) {
+      setActiveTab("finanzas");
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+    }
   };
 
   const eliminarFinanza = async (id: string) => {
@@ -139,18 +138,34 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  // ---- CALCULOS ----
+  // ---- NUEVAS FUNCIONES HISTORIAL ----
+  const reabrirSemana = async (trabajosDelBloque: any[]) => {
+    if (finanzas.length > 0) {
+      if (!confirm("⚠️ ATENCIÓN: Ya tenés expedientes cargados en la 'Semana Actual'. Si reabrís esta semana, los expedientes se van a mezclar. ¿Querés continuar?")) return;
+    } else {
+      if (!confirm("¿Estás seguro de reabrir esta semana? Volverá a la pestaña 'Semana Actual' para que sigas cargando.")) return;
+    }
+
+    const ids = trabajosDelBloque.map(t => t.id);
+    await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).in("id", ids);
+    cargarDatos();
+    setActiveTab("finanzas");
+  };
+
+  const borrarSemanaCompleta = async (trabajosDelBloque: any[]) => {
+    if (confirm("🚨 ¡PELIGRO! ¿Estás totalmente seguro de ELIMINAR todo este bloque de la base de datos? Esta acción NO se puede deshacer.")) {
+      const ids = trabajosDelBloque.map(t => t.id);
+      await supabase.from("finanzas").delete().in("id", ids);
+      cargarDatos();
+    }
+  };
+
+  // ---- CALCULOS CENTRALIZADOS ----
   const calcularPartes = (f: any) => {
     if (f.es_gasto_5050) {
-      // Si es un gasto 50/50, usamos la cajita "caja" para guardar el monto total del gasto
       const montoGasto = Number(f.caja);
-      return {
-        totalAportes: montoGasto, // El gasto total pagado
-        limpioLeo: -(montoGasto / 2), // Le restamos su mitad a la ganancia
-        limpioBruno: -(montoGasto / 2) // Le restamos su mitad a la ganancia
-      };
+      return { totalAportes: montoGasto, limpioLeo: -(montoGasto / 2), limpioBruno: -(montoGasto / 2) };
     } else {
-      // Expediente normal
       const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
       const limpio = Number(f.ingreso_total) - totalAportes;
       return {
@@ -161,30 +176,31 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  let cobradoLeo = 0, limpioLeoTotal = 0, gastosLeo = 0;
-  let cobradoBruno = 0, limpioBrunoTotal = 0, gastosBruno = 0;
+  const generarResumen = (lista: any[]) => {
+    let cobradoLeo = 0, limpioLeoTotal = 0, gastosLeo = 0;
+    let cobradoBruno = 0, limpioBrunoTotal = 0, gastosBruno = 0;
 
-  finanzas.forEach(f => {
-    const partes = calcularPartes(f);
-    limpioLeoTotal += partes.limpioLeo;
-    limpioBrunoTotal += partes.limpioBruno;
-    
-    if (f.es_gasto_5050) {
-      // El que lo pagó, suma a sus gastos salientes
-      if (f.encargado === "Leo") gastosLeo += partes.totalAportes;
-      else gastosBruno += partes.totalAportes;
-    } else {
-      if (f.encargado === "Leo") {
-        cobradoLeo += Number(f.ingreso_total); gastosLeo += partes.totalAportes;
+    lista.forEach(f => {
+      const partes = calcularPartes(f);
+      limpioLeoTotal += partes.limpioLeo;
+      limpioBrunoTotal += partes.limpioBruno;
+      
+      if (f.es_gasto_5050) {
+        if (f.encargado === "Leo") gastosLeo += partes.totalAportes;
+        else gastosBruno += partes.totalAportes;
       } else {
-        cobradoBruno += Number(f.ingreso_total); gastosBruno += partes.totalAportes;
+        if (f.encargado === "Leo") { cobradoLeo += Number(f.ingreso_total); gastosLeo += partes.totalAportes; } 
+        else { cobradoBruno += Number(f.ingreso_total); gastosBruno += partes.totalAportes; }
       }
-    }
-  });
+    });
 
-  const balanceLeo = cobradoLeo - limpioLeoTotal - gastosLeo;
-  const balanceBruno = cobradoBruno - limpioBrunoTotal - gastosBruno;
+    return {
+      cobradoLeo, limpioLeoTotal, gastosLeo, balanceLeo: cobradoLeo - limpioLeoTotal - gastosLeo,
+      cobradoBruno, limpioBrunoTotal, gastosBruno, balanceBruno: cobradoBruno - limpioBrunoTotal - gastosBruno
+    };
+  };
 
+  const resumenActual = generarResumen(finanzas);
   const trabajosLeo = trabajos.filter(t => t.encargado === "Leo");
   const trabajosBruno = trabajos.filter(t => t.encargado === "Bruno");
 
@@ -260,10 +276,8 @@ export default function DashboardAgrimensura() {
             </div>
 
             <form onSubmit={guardarFinanza} className="grid grid-cols-4 gap-4 items-end">
-              
               {!nuevaFinanza.esGasto5050 ? (
                 <>
-                  {/* FORMULARIO NORMAL */}
                   <div><label className="text-sm font-bold">Tipo</label><input ref={tipoInputRef} required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
                   <div><label className="text-sm font-bold">Propietario</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
                   <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={e => actualizarValoresFinanza('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
@@ -275,11 +289,10 @@ export default function DashboardAgrimensura() {
                 </>
               ) : (
                 <>
-                  {/* FORMULARIO 50/50 */}
                   <div><label className="text-sm font-bold">Concepto (Ej: Cuota Caja)</label><input ref={tipoInputRef} required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => setNuevaFinanza({...nuevaFinanza, tramite: e.target.value})}/></div>
                   <div><label className="text-sm font-bold">Pagado por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={e => setNuevaFinanza({...nuevaFinanza, encargado: e.target.value})}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
                   <div><label className="text-sm font-bold text-red-600">Monto del Gasto ($)</label><input type="text" inputMode="numeric" required className="w-full border p-2 rounded font-bold text-red-600" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
-                  <div className="text-sm text-slate-500 pb-2">Se le descontará exactamente el 50% de este monto a cada uno.</div>
+                  <div className="text-sm text-slate-500 pb-2">Se le descontará el 50% a cada uno.</div>
                 </>
               )}
               
@@ -290,26 +303,21 @@ export default function DashboardAgrimensura() {
             </form>
           </div>
 
-          {/* CUADRO DE LIQUIDACIÓN Y BOTÓN */}
           <div className="bg-slate-800 text-white rounded-lg shadow-lg p-6 flex items-center justify-between">
             <div className="flex gap-12">
               <div>
                 <h4 className="text-slate-400 font-bold text-sm mb-2">RESUMEN LEO</h4>
-                <p className="text-sm">Cobrado: ${formatearPlata(cobradoLeo)}</p>
-                <p className="text-sm">Limpio: ${formatearPlata(limpioLeoTotal)}</p>
-                <p className="text-sm border-b border-slate-600 pb-1 mb-1">Gastos (Propios y 50/50): ${formatearPlata(gastosLeo)}</p>
-                <p className={`font-bold text-lg ${balanceLeo > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                  {balanceLeo > 0 ? `A transferir: $${formatearPlata(balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(balanceLeo))}`}
-                </p>
+                <p className="text-sm">Cobrado: ${formatearPlata(resumenActual.cobradoLeo)}</p>
+                <p className="text-sm">Limpio: ${formatearPlata(resumenActual.limpioLeoTotal)}</p>
+                <p className="text-sm border-b border-slate-600 pb-1 mb-1">Gastos: ${formatearPlata(resumenActual.gastosLeo)}</p>
+                <p className={`font-bold text-lg ${resumenActual.balanceLeo > 0 ? 'text-red-400' : 'text-green-400'}`}>{resumenActual.balanceLeo > 0 ? `A transferir: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceLeo))}`}</p>
               </div>
               <div>
                 <h4 className="text-slate-400 font-bold text-sm mb-2">RESUMEN BRUNO</h4>
-                <p className="text-sm">Cobrado: ${formatearPlata(cobradoBruno)}</p>
-                <p className="text-sm">Limpio: ${formatearPlata(limpioBrunoTotal)}</p>
-                <p className="text-sm border-b border-slate-600 pb-1 mb-1">Gastos (Propios y 50/50): ${formatearPlata(gastosBruno)}</p>
-                <p className={`font-bold text-lg ${balanceBruno > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                  {balanceBruno > 0 ? `A transferir: $${formatearPlata(balanceBruno)}` : `A favor: $${formatearPlata(Math.abs(balanceBruno))}`}
-                </p>
+                <p className="text-sm">Cobrado: ${formatearPlata(resumenActual.cobradoBruno)}</p>
+                <p className="text-sm">Limpio: ${formatearPlata(resumenActual.limpioBrunoTotal)}</p>
+                <p className="text-sm border-b border-slate-600 pb-1 mb-1">Gastos: ${formatearPlata(resumenActual.gastosBruno)}</p>
+                <p className={`font-bold text-lg ${resumenActual.balanceBruno > 0 ? 'text-red-400' : 'text-green-400'}`}>{resumenActual.balanceBruno > 0 ? `A transferir: $${formatearPlata(resumenActual.balanceBruno)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceBruno))}`}</p>
               </div>
             </div>
             <button onClick={liquidarSemana} className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-lg transition-transform hover:scale-105">💰 CERRAR SEMANA</button>
@@ -329,10 +337,7 @@ export default function DashboardAgrimensura() {
                       <td className="p-4 text-slate-600">{f.es_gasto_5050 ? '-' : `$${formatearPlata(partes.totalAportes)}`}</td>
                       <td className={`p-4 font-bold ${partes.limpioLeo < 0 ? 'text-red-500' : 'text-blue-800'}`}>${formatearPlata(partes.limpioLeo)}</td>
                       <td className={`p-4 font-bold ${partes.limpioBruno < 0 ? 'text-red-500' : 'text-red-800'}`}>${formatearPlata(partes.limpioBruno)}</td>
-                      <td className="p-4 flex gap-2">
-                        <button onClick={() => iniciarEdicionFinanza(f)} className="text-xl hover:scale-110 transition-transform" title="Editar">✏️</button>
-                        <button onClick={() => eliminarFinanza(f.id)} className="text-xl hover:scale-110 transition-transform" title="Borrar">🗑️</button>
-                      </td>
+                      <td className="p-4 flex gap-2"><button onClick={() => iniciarEdicionFinanza(f)} className="text-xl hover:scale-110 transition-transform">✏️</button><button onClick={() => eliminarFinanza(f.id)} className="text-xl hover:scale-110 transition-transform">🗑️</button></td>
                     </tr>
                   );
                 })}
@@ -342,7 +347,7 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: HISTORIAL CON ACORDEON */}
+      {/* PESTAÑA: HISTORIAL */}
       {activeTab === "historial" && (
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-slate-800 mb-6">Trabajos Liquidados</h2>
@@ -352,43 +357,65 @@ export default function DashboardAgrimensura() {
             const tituloBloque = fechaKey === "anterior" 
               ? "Liquidaciones Anteriores (Sin fecha)" 
               : `Liquidación del ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
-            
             const estaAbierto = semanasAbiertas[fechaKey] || false;
+            
+            // Calculamos el resumen exclusivo para este bloque
+            const resumenBloque = generarResumen(trabajosDelBloque);
 
             return (
               <div key={fechaKey} className="bg-white rounded-lg shadow border overflow-hidden">
-                {/* CABECERA CLICKABLE DEL ACORDEON */}
-                <div 
-                  onClick={() => toggleHistorial(fechaKey)} 
-                  className="bg-slate-200 p-4 border-b border-slate-300 cursor-pointer hover:bg-slate-300 transition-colors flex justify-between items-center"
-                >
+                <div onClick={() => toggleHistorial(fechaKey)} className="bg-slate-200 p-4 border-b border-slate-300 cursor-pointer hover:bg-slate-300 transition-colors flex justify-between items-center">
                   <h3 className="font-bold text-slate-800 text-md">{tituloBloque}</h3>
-                  <span className="text-slate-500 font-bold text-sm">
-                    {estaAbierto ? '▼ Ocultar' : '▶ Ver Detalle'} ({trabajosDelBloque.length} items)
-                  </span>
+                  <span className="text-slate-500 font-bold text-sm">{estaAbierto ? '▼ Ocultar' : '▶ Ver Detalle'} ({trabajosDelBloque.length} items)</span>
                 </div>
                 
-                {/* TABLA OCULTA/VISIBLE */}
                 {estaAbierto && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left whitespace-nowrap">
-                      <thead><tr className="bg-slate-50 uppercase text-xs border-b text-slate-500"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total / Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
-                      <tbody>
-                        {trabajosDelBloque.map((h: any) => {
-                          const partes = calcularPartes(h);
-                          return (
-                            <tr key={h.id} className={`border-b text-slate-600 ${h.es_gasto_5050 ? 'bg-indigo-50' : ''}`}>
-                              <td className="p-3 font-bold">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded">50/50</span>}</td>
-                              <td className="p-3">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
-                              <td className="p-3">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                              <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-500' : ''}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
-                              <td className="p-3">${formatearPlata(partes.limpioLeo)}</td>
-                              <td className="p-3">${formatearPlata(partes.limpioBruno)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="p-4 bg-slate-50">
+                    
+                    {/* RESUMEN DEL BLOQUE HISTÓRICO Y BOTONES */}
+                    <div className="bg-white border rounded-lg p-4 mb-4 flex flex-col md:flex-row justify-between items-center shadow-sm">
+                      <div className="flex gap-8">
+                        <div>
+                          <p className="text-xs text-slate-400 font-bold mb-1">LEO</p>
+                          <p className="text-sm">Cobrado: ${formatearPlata(resumenBloque.cobradoLeo)} | Limpio: ${formatearPlata(resumenBloque.limpioLeoTotal)} | Gastos: ${formatearPlata(resumenBloque.gastosLeo)}</p>
+                          <p className={`font-bold ${resumenBloque.balanceLeo > 0 ? 'text-red-500' : 'text-green-600'}`}>{resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}</p>
+                        </div>
+                        <div className="border-l pl-8">
+                          <p className="text-xs text-slate-400 font-bold mb-1">BRUNO</p>
+                          <p className="text-sm">Cobrado: ${formatearPlata(resumenBloque.cobradoBruno)} | Limpio: ${formatearPlata(resumenBloque.limpioBrunoTotal)} | Gastos: ${formatearPlata(resumenBloque.gastosBruno)}</p>
+                          <p className={`font-bold ${resumenBloque.balanceBruno > 0 ? 'text-red-500' : 'text-green-600'}`}>{resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-4 md:mt-0">
+                        <button onClick={() => reabrirSemana(trabajosDelBloque)} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded font-bold text-sm shadow">Reabrir Semana</button>
+                        <button onClick={() => borrarSemanaCompleta(trabajosDelBloque)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm shadow">Borrar Semana</button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-left whitespace-nowrap">
+                        <thead><tr className="bg-slate-100 uppercase text-xs border-b text-slate-500"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total / Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th><th className="p-3">Acción</th></tr></thead>
+                        <tbody>
+                          {trabajosDelBloque.map((h: any) => {
+                            const partes = calcularPartes(h);
+                            return (
+                              <tr key={h.id} className={`border-b text-slate-600 ${h.es_gasto_5050 ? 'bg-indigo-50' : ''}`}>
+                                <td className="p-3 font-bold">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded">50/50</span>}</td>
+                                <td className="p-3">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
+                                <td className="p-3">{h.es_gasto_5050 ? '-' : h.encargado}</td>
+                                <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-500' : ''}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                <td className="p-3">${formatearPlata(partes.limpioLeo)}</td>
+                                <td className="p-3">${formatearPlata(partes.limpioBruno)}</td>
+                                <td className="p-3 flex gap-2">
+                                  <button onClick={() => iniciarEdicionFinanza(h, true)} className="text-lg hover:scale-110 transition-transform" title="Editar este registro">✏️</button>
+                                  <button onClick={() => eliminarFinanza(h.id)} className="text-lg hover:scale-110 transition-transform" title="Borrar de la base de datos">🗑️</button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
