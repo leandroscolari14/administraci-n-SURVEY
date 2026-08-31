@@ -6,6 +6,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Variables de Telegram
+const telegramBotToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "";
+const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
+
 export default function DashboardAgrimensura() {
   const [activeTab, setActiveTab] = useState("finanzas");
   const [trabajos, setTrabajos] = useState<any[]>([]);
@@ -31,7 +35,6 @@ export default function DashboardAgrimensura() {
     cargarDatos();
   }, []);
 
-  // Efecto para el cronómetro de Catastro
   useEffect(() => {
     let intervalo: any;
     if (catastro.usuario !== "Libre" && catastro.fecha) {
@@ -66,16 +69,41 @@ export default function DashboardAgrimensura() {
     }
   };
 
+  // ---- FUNCION PARA MANDAR TELEGRAM ----
+  const enviarTelegram = async (mensaje: string) => {
+    if (!telegramBotToken || !telegramChatId) return; // Si faltan las llaves, no hace nada
+    const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
+    try {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: telegramChatId,
+          text: mensaje,
+          parse_mode: "Markdown"
+        })
+      });
+    } catch (error) {
+      console.error("Error enviando Telegram", error);
+    }
+  };
+
   // ---- FUNCIONES CATASTRO ----
   const tomarCatastro = async (nombre: string) => {
     const nuevaFecha = new Date().toISOString();
     await supabase.from("estado_catastro").update({ usuario: nombre, fecha_actualizacion: nuevaFecha }).eq("id", 1);
     cargarDatos();
+    
+    // Mandamos el aviso al grupo
+    await enviarTelegram(`🔴 *SISTEMA EN USO*\n\n**${nombre}** acaba de entrar al sistema SCIT de Catastro.`);
   };
 
   const liberarCatastro = async () => {
     await supabase.from("estado_catastro").update({ usuario: "Libre", fecha_actualizacion: new Date().toISOString() }).eq("id", 1);
     cargarDatos();
+    
+    // Avisamos que se liberó
+    await enviarTelegram(`🟢 *SISTEMA LIBERADO*\n\nEl sistema SCIT ya está disponible nuevamente.`);
   };
 
   // ---- FUNCIONES GENERALES ----
