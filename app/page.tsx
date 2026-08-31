@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -11,6 +11,9 @@ export default function DashboardAgrimensura() {
   const [trabajos, setTrabajos] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
+
+  // Referencia para volver el foco al input "Tipo"
+  const tipoInputRef = useRef<HTMLInputElement>(null);
 
   // Estados Trabajos
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
@@ -29,7 +32,7 @@ export default function DashboardAgrimensura() {
   const cargarDatos = async () => {
     const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
-    const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_carga", { ascending: false });
+    const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
     
     if (dataTrabajos) setTrabajos(dataTrabajos);
     if (dataFinanzas) setFinanzas(dataFinanzas);
@@ -89,8 +92,14 @@ export default function DashboardAgrimensura() {
         ingreso_total: nuevaFinanza.ingreso, caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extra_leo: nuevaFinanza.extraLeo, extra_bruno: nuevaFinanza.extraBruno
       }]);
     }
+    // Reseteamos el formulario
     setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
     cargarDatos();
+    
+    // Devolvemos el cursor al input de Tipo después de un instante
+    setTimeout(() => {
+      tipoInputRef.current?.focus();
+    }, 100);
   };
 
   const iniciarEdicionFinanza = (f: any) => {
@@ -98,11 +107,20 @@ export default function DashboardAgrimensura() {
     setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0) });
   };
 
+  const eliminarFinanza = async (id: string) => {
+    if (confirm("¿Estás seguro de borrar este ingreso?")) {
+      await supabase.from("finanzas").delete().eq("id", id);
+      cargarDatos();
+    }
+  };
+
   const liquidarSemana = async () => {
     if (finanzas.length === 0) return alert("No hay trabajos pendientes para liquidar esta semana.");
     if (confirm("¿Estás seguro de liquidar? Se cerrarán las cuentas y los trabajos pasarán al historial.")) {
       const ids = finanzas.map(f => f.id);
-      await supabase.from("finanzas").update({ liquidado: true }).in("id", ids);
+      // Guardamos la fecha y hora exacta del cierre para agruparlos en el historial
+      const fechaCierre = new Date().toISOString(); 
+      await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: fechaCierre }).in("id", ids);
       cargarDatos();
       alert("¡Semana liquidada con éxito! Cuentas en 0.");
     }
@@ -119,7 +137,6 @@ export default function DashboardAgrimensura() {
     };
   };
 
-  // Lógica de resumen semanal
   let cobradoLeo = 0, limpioLeoTotal = 0, gastosLeo = 0;
   let cobradoBruno = 0, limpioBrunoTotal = 0, gastosBruno = 0;
 
@@ -129,11 +146,9 @@ export default function DashboardAgrimensura() {
     limpioBrunoTotal += partes.limpioBruno;
     
     if (f.encargado === "Leo") {
-      cobradoLeo += Number(f.ingreso_total);
-      gastosLeo += partes.totalAportes;
+      cobradoLeo += Number(f.ingreso_total); gastosLeo += partes.totalAportes;
     } else {
-      cobradoBruno += Number(f.ingreso_total);
-      gastosBruno += partes.totalAportes;
+      cobradoBruno += Number(f.ingreso_total); gastosBruno += partes.totalAportes;
     }
   });
 
@@ -142,6 +157,20 @@ export default function DashboardAgrimensura() {
 
   const trabajosLeo = trabajos.filter(t => t.encargado === "Leo");
   const trabajosBruno = trabajos.filter(t => t.encargado === "Bruno");
+
+  // ---- AGRUPAR HISTORIAL POR FECHA DE LIQUIDACION ----
+  const historialAgrupado = historial.reduce((acc, item) => {
+    const key = item.fecha_liquidacion || "anterior";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+
+  const fechasOrdenadas = Object.keys(historialAgrupado).sort((a, b) => {
+    if (a === "anterior") return 1;
+    if (b === "anterior") return -1;
+    return new Date(b).getTime() - new Date(a).getTime();
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-800">
@@ -189,7 +218,8 @@ export default function DashboardAgrimensura() {
       {activeTab === "finanzas" && (
         <div className="space-y-6">
           <form onSubmit={guardarFinanza} className="bg-white p-4 rounded-lg shadow border grid grid-cols-4 gap-4 items-end">
-             <div><label className="text-sm font-bold">Tipo</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
+             {/* Acá está agregada la ref (tipoInputRef) para volver el foco automáticamente */}
+             <div><label className="text-sm font-bold">Tipo</label><input ref={tipoInputRef} required className="w-full border p-2 rounded" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
             <div><label className="text-sm font-bold">Propietario</label><input required className="w-full border p-2 rounded" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
             <div><label className="text-sm font-bold">Entró por:</label><select className="w-full border p-2 rounded" value={nuevaFinanza.encargado} onChange={e => actualizarValoresFinanza('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
             <div><label className="text-sm font-bold">Ingreso Total ($)</label><input type="number" required className="w-full border p-2 rounded" value={nuevaFinanza.ingreso} onChange={e => setNuevaFinanza({...nuevaFinanza, ingreso: Number(e.target.value)})}/></div>
@@ -231,13 +261,17 @@ export default function DashboardAgrimensura() {
 
           <div className="bg-white rounded-lg shadow border overflow-x-auto">
             <table className="w-full text-left whitespace-nowrap">
-              <thead><tr className="bg-slate-100 uppercase text-xs border-b"><th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Total</th><th className="p-4">Gastos</th><th className="p-4 text-blue-700">Limpio Leo</th><th className="p-4 text-red-700">Limpio Bruno</th><th className="p-4 w-16">Acción</th></tr></thead>
+              <thead><tr className="bg-slate-100 uppercase text-xs border-b"><th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Total</th><th className="p-4">Gastos</th><th className="p-4 text-blue-700">Limpio Leo</th><th className="p-4 text-red-700">Limpio Bruno</th><th className="p-4">Acción</th></tr></thead>
               <tbody>
                 {finanzas.map((f) => {
                   const partes = calcularPartes(f);
                   return (
                     <tr key={f.id} className={`border-b ${f.encargado === 'Leo' ? 'bg-[#e0f2fe]' : 'bg-[#ffe4e6]'}`}>
-                      <td className="p-4 font-bold">{f.tipo_tramite}</td><td className="p-4">{f.propietario}</td><td className="p-4 font-bold">${formatearPlata(f.ingreso_total)}</td><td className="p-4 text-slate-600">${formatearPlata(partes.totalAportes)}</td><td className="p-4 font-bold text-blue-800">${formatearPlata(partes.limpioLeo)}</td><td className="p-4 font-bold text-red-800">${formatearPlata(partes.limpioBruno)}</td><td className="p-4"><button onClick={() => iniciarEdicionFinanza(f)} className="text-xl hover:scale-110 transition-transform">✏️</button></td>
+                      <td className="p-4 font-bold">{f.tipo_tramite}</td><td className="p-4">{f.propietario}</td><td className="p-4 font-bold">${formatearPlata(f.ingreso_total)}</td><td className="p-4 text-slate-600">${formatearPlata(partes.totalAportes)}</td><td className="p-4 font-bold text-blue-800">${formatearPlata(partes.limpioLeo)}</td><td className="p-4 font-bold text-red-800">${formatearPlata(partes.limpioBruno)}</td>
+                      <td className="p-4 flex gap-2">
+                        <button onClick={() => iniciarEdicionFinanza(f)} className="text-xl hover:scale-110 transition-transform" title="Editar">✏️</button>
+                        <button onClick={() => eliminarFinanza(f.id)} className="text-xl hover:scale-110 transition-transform" title="Borrar">🗑️</button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -247,25 +281,40 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: HISTORIAL */}
+      {/* PESTAÑA: HISTORIAL (Ahora agrupado por bloques semanales) */}
       {activeTab === "historial" && (
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-slate-800">Trabajos Liquidados</h2>
-          <div className="bg-white rounded-lg shadow border overflow-x-auto">
-            <table className="w-full text-left whitespace-nowrap">
-              <thead><tr className="bg-slate-100 uppercase text-xs border-b"><th className="p-4">Fecha Carga</th><th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Entró Por</th><th className="p-4">Total</th><th className="p-4">Limpio Leo</th><th className="p-4">Limpio Bruno</th></tr></thead>
-              <tbody>
-                {historial.map((h) => {
-                  const partes = calcularPartes(h);
-                  return (
-                    <tr key={h.id} className="border-b text-slate-500">
-                      <td className="p-4">{new Date(h.fecha_carga).toLocaleDateString("es-AR")}</td><td className="p-4 font-bold">{h.tipo_tramite}</td><td className="p-4">{h.propietario}</td><td className="p-4">{h.encargado}</td><td className="p-4 font-bold">${formatearPlata(h.ingreso_total)}</td><td className="p-4">${formatearPlata(partes.limpioLeo)}</td><td className="p-4">${formatearPlata(partes.limpioBruno)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="space-y-8">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">Trabajos Liquidados</h2>
+          
+          {fechasOrdenadas.map(fechaKey => {
+            const trabajosDelBloque = historialAgrupado[fechaKey];
+            const tituloBloque = fechaKey === "anterior" 
+              ? "Liquidaciones Anteriores (Sin fecha)" 
+              : `Semana cerrada el ${new Date(fechaKey).toLocaleDateString("es-AR")} a las ${new Date(fechaKey).toLocaleTimeString("es-AR", {hour: '2-digit', minute:'2-digit'})}`;
+
+            return (
+              <div key={fechaKey} className="bg-white rounded-lg shadow border overflow-hidden">
+                <div className="bg-slate-200 p-3 border-b border-slate-300">
+                  <h3 className="font-bold text-slate-800 text-md">{tituloBloque}</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left whitespace-nowrap">
+                    <thead><tr className="bg-slate-50 uppercase text-xs border-b text-slate-500"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
+                    <tbody>
+                      {trabajosDelBloque.map((h: any) => {
+                        const partes = calcularPartes(h);
+                        return (
+                          <tr key={h.id} className="border-b text-slate-600">
+                            <td className="p-3 font-bold">{h.tipo_tramite}</td><td className="p-3">{h.propietario}</td><td className="p-3">{h.encargado}</td><td className="p-3 font-bold">${formatearPlata(h.ingreso_total)}</td><td className="p-3">${formatearPlata(partes.limpioLeo)}</td><td className="p-3">${formatearPlata(partes.limpioBruno)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
