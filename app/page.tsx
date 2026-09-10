@@ -126,7 +126,6 @@ export default function DashboardAgrimensura() {
   const iniciarEdicionTrabajo = (t: any) => {
     setEditandoTrabajoId(t.id);
     setNuevoTrabajo({ nombre: t.nombre_expediente, estado: t.estado_detalle, color: t.color_alerta, encargado: t.encargado || "Leo" });
-    // Si editamos un trabajo de Leo o Bruno, abrimos su pestaña automáticamente para que lo vea
     if (t.encargado === "Leo") setLeoAbierto(true);
     if (t.encargado === "Bruno") setBrunoAbierto(true);
   };
@@ -379,13 +378,12 @@ export default function DashboardAgrimensura() {
                 <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase">No se encontraron expedientes</p>
               ) : (
                 <table className="w-full text-left border-collapse">
-                  <thead><tr className="bg-[#111111] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Expediente / Tipo</th><th className="p-4">Encomienda</th><th className="p-4">Fecha Finalización</th><th className="p-4 w-16">Acción</th></tr></thead>
+                  <thead><tr className="bg-[#111111] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Expediente</th><th className="p-4">Encomienda</th><th className="p-4">Fecha Finalización</th><th className="p-4 w-16">Acción</th></tr></thead>
                   <tbody>
                     {trabajosFiltrados.map(t => (
                       <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
                         <td className="p-4">
                             <span className="font-bold text-zinc-300 block">{t.nombre_expediente}</span>
-                            <span className="text-xs text-zinc-500">{t.estado_detalle}</span>
                         </td>
                         <td className="p-4 text-zinc-400 font-bold">{t.encargado}</td>
                         <td className="p-4 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}</td>
