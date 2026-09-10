@@ -13,6 +13,10 @@ export default function DashboardAgrimensura() {
   const [activeTab, setActiveTab] = useState("trabajos");
   const [subTabTrabajos, setSubTabTrabajos] = useState("activos");
   
+  // Estados para las listas contraíbles de los expedientes
+  const [leoAbierto, setLeoAbierto] = useState(false);
+  const [brunoAbierto, setBrunoAbierto] = useState(false);
+  
   const [trabajosActivos, setTrabajosActivos] = useState<any[]>([]);
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
@@ -33,7 +37,6 @@ export default function DashboardAgrimensura() {
   const hoy = new Date().toISOString().split('T')[0];
   const [nuevaMedicion, setNuevaMedicion] = useState({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "" });
 
-  // Estados para los filtros del historial de trabajos
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTexto, setFiltroTexto] = useState("");
 
@@ -108,7 +111,6 @@ export default function DashboardAgrimensura() {
     else setNuevaFinanza({ ...nuevaFinanza, esGasto5050: false, tramite: "VEP", propietario: "", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
   };
 
-  // ---- TRABAJOS Y ETAPAS ----
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
     if (editandoTrabajoId) {
@@ -124,6 +126,9 @@ export default function DashboardAgrimensura() {
   const iniciarEdicionTrabajo = (t: any) => {
     setEditandoTrabajoId(t.id);
     setNuevoTrabajo({ nombre: t.nombre_expediente, estado: t.estado_detalle, color: t.color_alerta, encargado: t.encargado || "Leo" });
+    // Si editamos un trabajo de Leo o Bruno, abrimos su pestaña automáticamente para que lo vea
+    if (t.encargado === "Leo") setLeoAbierto(true);
+    if (t.encargado === "Bruno") setBrunoAbierto(true);
   };
 
   const toggleEtapa = async (id: string, etapa: string, valorActual: boolean) => {
@@ -145,7 +150,6 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  // ---- MEDICIONES ----
   const guardarMedicion = async (e: any) => {
     e.preventDefault();
     const { error } = await supabase.from("mediciones").insert([{ titulo: nuevaMedicion.titulo, fecha: nuevaMedicion.fecha, hora: nuevaMedicion.hora, ubicacion: nuevaMedicion.ubicacion }]);
@@ -167,7 +171,6 @@ export default function DashboardAgrimensura() {
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`📐 Medición: ${m.titulo}`)}&dates=${f(fechaInicio)}/${f(fechaFin)}&location=${encodeURIComponent(m.ubicacion)}&details=${encodeURIComponent(`Turno SURVEY.`)}&add=${invitados}`;
   };
 
-  // ---- FINANZAS ----
   const guardarFinanza = async (e: any) => {
     e.preventDefault();
     const datosGuardar = { tipo_tramite: nuevaFinanza.tramite, propietario: nuevaFinanza.propietario, encargado: nuevaFinanza.encargado, ingreso_total: nuevaFinanza.ingreso, caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extra_leo: nuevaFinanza.extraLeo, extra_bruno: nuevaFinanza.extraBruno, es_gasto_5050: nuevaFinanza.esGasto5050 };
@@ -203,7 +206,6 @@ export default function DashboardAgrimensura() {
   const trabajosLeo = trabajosActivos.filter(t => t.encargado === "Leo");
   const trabajosBruno = trabajosActivos.filter(t => t.encargado === "Bruno");
 
-  // Aplicar filtros al historial de trabajos
   const trabajosFiltrados = trabajosFinalizados.filter(t => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
     const coincideTexto = t.nombre_expediente.toLowerCase().includes(filtroTexto.toLowerCase());
@@ -214,7 +216,6 @@ export default function DashboardAgrimensura() {
   const fechasOrdenadas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
-  // Componente de Etapas
   const RenderEtapas = ({ t }: { t: any }) => {
     const etapas = [
       { id: 'e_medicion', label: 'Medición' }, { id: 'e_plano', label: 'Plano' }, 
@@ -270,61 +271,85 @@ export default function DashboardAgrimensura() {
               </form>
 
               <div className="space-y-6">
+                
+                {/* EXPEDIENTES LEO - CONTRAÍBLE */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                  <div className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between"><h3 className="font-bold text-white tracking-widest uppercase text-sm">Expedientes Leo</h3><span className="text-[#727A4E] font-bold">{trabajosLeo.length} Activos</span></div>
-                  <table className="w-full text-left border-collapse">
-                    <tbody>
-                      {trabajosLeo.map(t => (
-                        <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                          <td className="p-4 w-1/3">
-                            <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
-                              {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
-                            </div>
-                            <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
-                          </td>
-                          <td className="p-4"><RenderEtapas t={t} /></td>
-                          <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6">
-                            <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
-                            <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
-                            <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div 
+                    onClick={() => setLeoAbierto(!leoAbierto)} 
+                    className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none"
+                  >
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2">
+                      <span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo
+                    </h3>
+                    <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosLeo.length} Activos</span>
+                  </div>
+                  
+                  {leoAbierto && (
+                    <table className="w-full text-left border-collapse">
+                      <tbody>
+                        {trabajosLeo.map(t => (
+                          <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
+                            <td className="p-4 w-1/3">
+                              <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
+                                {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
+                              </div>
+                              <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
+                            </td>
+                            <td className="p-4"><RenderEtapas t={t} /></td>
+                            <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6">
+                              <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
+                              <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
+                              <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
 
+                {/* EXPEDIENTES BRUNO - CONTRAÍBLE */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                  <div className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between"><h3 className="font-bold text-white tracking-widest uppercase text-sm">Expedientes Bruno</h3><span className="text-[#727A4E] font-bold">{trabajosBruno.length} Activos</span></div>
-                  <table className="w-full text-left border-collapse">
-                    <tbody>
-                      {trabajosBruno.map(t => (
-                        <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                          <td className="p-4 w-1/3">
-                            <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
-                              {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
-                            </div>
-                            <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
-                          </td>
-                          <td className="p-4"><RenderEtapas t={t} /></td>
-                          <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6">
-                            <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
-                            <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
-                            <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div 
+                    onClick={() => setBrunoAbierto(!brunoAbierto)} 
+                    className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none"
+                  >
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2">
+                      <span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno
+                    </h3>
+                    <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosBruno.length} Activos</span>
+                  </div>
+                  
+                  {brunoAbierto && (
+                    <table className="w-full text-left border-collapse">
+                      <tbody>
+                        {trabajosBruno.map(t => (
+                          <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
+                            <td className="p-4 w-1/3">
+                              <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
+                                {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
+                              </div>
+                              <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
+                            </td>
+                            <td className="p-4"><RenderEtapas t={t} /></td>
+                            <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6">
+                              <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
+                              <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
+                              <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
+
               </div>
             </>
           )}
 
           {subTabTrabajos === "finalizados" && (
             <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-              
-              {/* Barra de Filtros */}
               <div className="bg-[#222222] p-6 border-b border-zinc-800 flex justify-between items-end gap-4">
                 <div>
                   <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Historial Histórico</h3>
