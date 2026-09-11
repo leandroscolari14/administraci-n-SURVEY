@@ -185,7 +185,6 @@ export default function DashboardAgrimensura() {
   const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setActiveTab("finanzas"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
-  // --- ACÁ ESTÁ EL CAMBIO DE PORCENTAJES (70% - 30% PARA AMBOS) ---
   const calcularPartes = (f: any) => {
     if (f.es_gasto_5050) return { totalAportes: Number(f.caja), limpioLeo: 0, limpioBruno: 0 };
     const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
@@ -220,10 +219,17 @@ export default function DashboardAgrimensura() {
   const fechasOrdenadas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
+  // NUEVAS ETAPAS DE SURVEY ACTUALIZADAS
   const RenderEtapas = ({ t }: { t: any }) => {
     const etapas = [
-      { id: 'e_medicion', label: 'Medición' }, { id: 'e_plano', label: 'Plano' }, 
-      { id: 'e_colegio', label: 'Colegio' }, { id: 'e_catastro', label: 'Catastro' }, { id: 'e_muni', label: 'Muni' }
+      { id: 'e_medido', label: 'Medido' }, 
+      { id: 'e_definido', label: 'Definido' }, 
+      { id: 'e_solicitado_ld', label: 'Solicitado LD' }, 
+      { id: 'e_fac', label: 'FAC' }, 
+      { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, 
+      { id: 'e_pedido_cc', label: 'Pedido CC' }, 
+      { id: 'e_aprobado', label: 'Aprobado' }, 
+      { id: 'e_cc_emitido', label: 'CC Emitido' }
     ];
     return (
       <div className="flex gap-2 flex-wrap">
@@ -293,14 +299,14 @@ export default function DashboardAgrimensura() {
                       <tbody>
                         {trabajosLeo.map(t => (
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                            <td className="p-4 w-1/3">
+                            <td className="p-4 w-1/4">
                               <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
                                 {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
                               </div>
                               <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
                             </td>
-                            <td className="p-4"><RenderEtapas t={t} /></td>
-                            <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6">
+                            <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
+                            <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
                               <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
                               <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
                               <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
@@ -329,14 +335,14 @@ export default function DashboardAgrimensura() {
                       <tbody>
                         {trabajosBruno.map(t => (
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                            <td className="p-4 w-1/3">
+                            <td className="p-4 w-1/4">
                               <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
                                 {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
                               </div>
                               <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
                             </td>
-                            <td className="p-4"><RenderEtapas t={t} /></td>
-                            <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6">
+                            <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
+                            <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
                               <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
                               <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
                               <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
