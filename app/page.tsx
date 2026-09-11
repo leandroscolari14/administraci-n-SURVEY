@@ -185,11 +185,16 @@ export default function DashboardAgrimensura() {
   const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setActiveTab("finanzas"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
+  // --- ACÁ ESTÁ EL CAMBIO DE PORCENTAJES (70% - 30% PARA AMBOS) ---
   const calcularPartes = (f: any) => {
     if (f.es_gasto_5050) return { totalAportes: Number(f.caja), limpioLeo: 0, limpioBruno: 0 };
     const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
     const limpio = Number(f.ingreso_total) - totalAportes;
-    return { totalAportes: Math.round(totalAportes), limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.20), limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.80 : limpio * 0.30) };
+    return { 
+      totalAportes: Math.round(totalAportes), 
+      limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.30), 
+      limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.70 : limpio * 0.30) 
+    };
   };
 
   const generarResumen = (lista: any[]) => {
