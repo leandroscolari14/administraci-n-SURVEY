@@ -219,7 +219,6 @@ export default function DashboardAgrimensura() {
   const fechasOrdenadas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
-  // NUEVAS ETAPAS DE SURVEY ACTUALIZADAS
   const RenderEtapas = ({ t }: { t: any }) => {
     const etapas = [
       { id: 'e_medido', label: 'Medido' }, 
@@ -274,7 +273,7 @@ export default function DashboardAgrimensura() {
                 <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Expediente</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.nombre} onChange={e => setNuevoTrabajo({...nuevoTrabajo, nombre: e.target.value})} placeholder="Ej: PH DELTA"/></div>
                 <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas / Nro (Opcional)</label><input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/></div>
                 <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Encargado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
-                <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Prioridad</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Normal</option><option value="amarillo">Urgente</option></select></div>
+                <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Estado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Ingresado (Verde)</option><option value="amarillo">Pendiente (Amarillo)</option></select></div>
                 
                 <button type="submit" className={`px-6 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar" : "Agregar"}</button>
                 {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ nombre: "", estado: "", color: "verde", encargado: "Leo" });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
@@ -300,10 +299,10 @@ export default function DashboardAgrimensura() {
                         {trabajosLeo.map(t => (
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                             <td className="p-4 w-1/4">
-                              <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
-                                {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
+                              <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                                {t.nombre_expediente}
                               </div>
-                              <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
+                              <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                             </td>
                             <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                             <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
@@ -336,10 +335,10 @@ export default function DashboardAgrimensura() {
                         {trabajosBruno.map(t => (
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                             <td className="p-4 w-1/4">
-                              <div className="font-bold text-zinc-200 text-lg flex items-center gap-2">
-                                {t.color_alerta === 'amarillo' && <span title="Urgente" className="text-yellow-500 text-sm">⚠️</span>} {t.nombre_expediente}
+                              <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                                {t.nombre_expediente}
                               </div>
-                              <div className="text-zinc-500 text-xs mt-1">{t.estado_detalle}</div>
+                              <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                             </td>
                             <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                             <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
