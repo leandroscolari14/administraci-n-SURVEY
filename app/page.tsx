@@ -40,7 +40,7 @@ export default function DashboardAgrimensura() {
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTexto, setFiltroTexto] = useState("");
-  const [filtroMes, setFiltroMes] = useState(""); // Filtro específico por mes/año
+  const [filtroMes, setFiltroMes] = useState("");
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -118,7 +118,7 @@ export default function DashboardAgrimensura() {
     const datosGuardar = {
       tipo: nuevoTrabajo.tipo,
       propietario: nuevoTrabajo.propietario,
-      nombre_expediente: `${nuevoTrabajo.tipo} - ${nuevoTrabajo.propietario}`, // Fallback legibilidad
+      nombre_expediente: `${nuevoTrabajo.tipo} - ${nuevoTrabajo.propietario}`, 
       estado_detalle: nuevoTrabajo.estado,
       color_alerta: nuevoTrabajo.color,
       encargado: nuevoTrabajo.encargado
@@ -199,7 +199,7 @@ export default function DashboardAgrimensura() {
   };
   const iniciarEdicionFinanza = (f: any) => { setEditandoFinanzaId(f.id); setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false }); };
   const eliminarFinanza = async (id: string) => { if (confirm("¿Borrar registro?")) { await supabase.from("finanzas").delete().eq("id", id); cargarDatos(); } };
-  const liquidarSemana = async () => { if (finanzas.length === 0) return alert("Nada para liquidar."); if (confirm("¿Liquidar semana?")) { const ids = finanzas.map(f => f.id); await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: new Date().toISOString() }).in("id", ids); cargarDatos(); } };
+  const liquidarSemana = async () => { if (finanzas.length === 0) return alert("Nada para liquidar."); if (confirm("¿Liquidar semana?")) { const ids = finanzas.map((f: any) => f.id); await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: new Date().toISOString() }).in("id", ids); cargarDatos(); } };
   const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setActiveTab("finanzas"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
@@ -212,7 +212,7 @@ export default function DashboardAgrimensura() {
 
   const generarResumen = (lista: any[]) => {
     let cobradoLeo = 0, cobradoBruno = 0, gastosSalientesLeo = 0, gastosSalientesBruno = 0, gananciaPuraLeo = 0, gananciaPuraBruno = 0, deuda5050Leo = 0, deuda5050Bruno = 0;
-    lista.forEach(f => {
+    lista.forEach((f: any) => {
       if (f.es_gasto_5050) { const gasto = Number(f.caja); deuda5050Leo += gasto / 2; deuda5050Bruno += gasto / 2; if (f.encargado === "Leo") gastosSalientesLeo += gasto; else gastosSalientesBruno += gasto; } 
       else { const partes = calcularPartes(f); gananciaPuraLeo += partes.limpioLeo; gananciaPuraBruno += partes.limpioBruno; if (f.encargado === "Leo") { cobradoLeo += Number(f.ingreso_total); gastosSalientesLeo += partes.totalAportes; } else { cobradoBruno += Number(f.ingreso_total); gastosSalientesBruno += partes.totalAportes; } }
     });
@@ -220,11 +220,10 @@ export default function DashboardAgrimensura() {
   };
 
   const resumenActual = generarResumen(finanzas);
-  const trabajosLeo = trabajosActivos.filter(t => t.encargado === "Leo");
-  const trabajosBruno = trabajosActivos.filter(t => t.encargado === "Bruno");
+  const trabajosLeo = trabajosActivos.filter((t: any) => t.encargado === "Leo");
+  const trabajosBruno = trabajosActivos.filter((t: any) => t.encargado === "Bruno");
 
-  // Filtrado y agrupación del historial de Expedientes Finalizados
-  const trabajosFiltrados = trabajosFinalizados.filter(t => {
+  const trabajosFiltrados = trabajosFinalizados.filter((t: any) => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
     const searchStr = `${t.tipo || ''} ${t.propietario || ''} ${t.nombre_expediente || ''}`.toLowerCase();
     const coincideTexto = searchStr.includes(filtroTexto.toLowerCase());
@@ -232,7 +231,7 @@ export default function DashboardAgrimensura() {
     return coincideEncargado && coincideTexto && coincideMes;
   });
 
-  const trabajosPorAnio = trabajosFiltrados.reduce((acc, t) => {
+  const trabajosPorAnio = trabajosFiltrados.reduce((acc: any, t: any) => {
     const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
     if (!acc[anio]) acc[anio] = [];
     acc[anio].push(t);
@@ -242,7 +241,7 @@ export default function DashboardAgrimensura() {
   const aniosOrdenados = Object.keys(trabajosPorAnio).sort((a, b) => b.localeCompare(a));
   const toggleAnio = (anio: string) => setAniosAbiertos({ ...aniosAbiertos, [anio]: !aniosAbiertos[anio] });
 
-  const historialAgrupado = historial.reduce((acc, item) => { const key = item.fecha_liquidacion || "anterior"; if (!acc[key]) acc[key] = []; acc[key].push(item); return acc; }, {});
+  const historialAgrupado = historial.reduce((acc: any, item: any) => { const key = item.fecha_liquidacion || "anterior"; if (!acc[key]) acc[key] = []; acc[key].push(item); return acc; }, {});
   const fechasOrdenadasFinanzas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
@@ -255,7 +254,7 @@ export default function DashboardAgrimensura() {
     ];
     return (
       <div className="flex gap-2 flex-wrap">
-        {etapas.map(e => (
+        {etapas.map((e: any) => (
           <button key={e.id} onClick={() => toggleEtapa(t.id, e.id, t[e.id])} title={e.label}
             className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded border transition-colors ${t[e.id] ? 'bg-[#727A4E] text-white border-[#727A4E]' : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500'}`}>
             {e.label}
@@ -315,7 +314,7 @@ export default function DashboardAgrimensura() {
                   {leoAbierto && (
                     <table className="w-full text-left border-collapse">
                       <tbody>
-                        {trabajosLeo.map(t => (
+                        {trabajosLeo.map((t: any) => (
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                             <td className="p-4 w-1/4">
                               <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
@@ -346,7 +345,7 @@ export default function DashboardAgrimensura() {
                   {brunoAbierto && (
                     <table className="w-full text-left border-collapse">
                       <tbody>
-                        {trabajosBruno.map(t => (
+                        {trabajosBruno.map((t: any) => (
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                             <td className="p-4 w-1/4">
                               <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
@@ -429,7 +428,7 @@ export default function DashboardAgrimensura() {
                               </tr>
                             </thead>
                             <tbody>
-                              {trabajosPorAnio[anio].map(t => (
+                              {trabajosPorAnio[anio].map((t: any) => (
                                 <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
                                   <td className="p-4 font-black text-[#A4B070]">{t.tipo || '-'}</td>
                                   <td className="p-4"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
@@ -468,7 +467,7 @@ export default function DashboardAgrimensura() {
               <table className="w-full text-left border-collapse">
                 <thead><tr className="bg-[#111111] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Expediente</th><th className="p-4">Fecha</th><th className="p-4">Hora</th><th className="p-4">Ubicación</th><th className="p-4">Acciones</th></tr></thead>
                 <tbody>
-                  {mediciones.map(m => {
+                  {mediciones.map((m: any) => {
                     const [anio, mes, dia] = m.fecha.split("-");
                     return (
                       <tr key={m.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
@@ -577,7 +576,7 @@ export default function DashboardAgrimensura() {
             <table className="w-full text-left whitespace-nowrap">
               <thead><tr className="bg-[#222222] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Tipo</th><th className="p-4">Propietario / Pagó</th><th className="p-4">Ingreso / Costo</th><th className="p-4">Gastos Trámite</th><th className="p-4 text-zinc-300">Limpio Leo</th><th className="p-4 text-zinc-300">Limpio Bruno</th><th className="p-4 w-16">Acción</th></tr></thead>
               <tbody>
-                {finanzas.map((f) => {
+                {finanzas.map((f: any) => {
                   const partes = calcularPartes(f);
                   return (
                     <tr key={f.id} className={`border-b border-zinc-800 hover:bg-[#2A2A2A] ${f.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
