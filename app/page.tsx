@@ -13,9 +13,10 @@ export default function DashboardAgrimensura() {
   const [activeTab, setActiveTab] = useState("trabajos");
   const [subTabTrabajos, setSubTabTrabajos] = useState("activos");
   
-  // Estados para las listas contraíbles de los expedientes
+  // Estados para listas contraíbles
   const [leoAbierto, setLeoAbierto] = useState(false);
   const [brunoAbierto, setBrunoAbierto] = useState(false);
+  const [aniosAbiertos, setAniosAbiertos] = useState<Record<string, boolean>>({});
   
   const [trabajosActivos, setTrabajosActivos] = useState<any[]>([]);
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
@@ -28,7 +29,7 @@ export default function DashboardAgrimensura() {
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   const tipoInputRef = useRef<HTMLInputElement>(null);
 
-  const [nuevoTrabajo, setNuevoTrabajo] = useState({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
+  const [nuevoTrabajo, setNuevoTrabajo] = useState({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
@@ -39,6 +40,7 @@ export default function DashboardAgrimensura() {
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTexto, setFiltroTexto] = useState("");
+  const [filtroMes, setFiltroMes] = useState(""); // Filtro específico por mes/año
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -113,19 +115,34 @@ export default function DashboardAgrimensura() {
 
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
+    const datosGuardar = {
+      tipo: nuevoTrabajo.tipo,
+      propietario: nuevoTrabajo.propietario,
+      nombre_expediente: `${nuevoTrabajo.tipo} - ${nuevoTrabajo.propietario}`, // Fallback legibilidad
+      estado_detalle: nuevoTrabajo.estado,
+      color_alerta: nuevoTrabajo.color,
+      encargado: nuevoTrabajo.encargado
+    };
+
     if (editandoTrabajoId) {
-      await supabase.from("trabajos_curso").update({ nombre_expediente: nuevoTrabajo.nombre, estado_detalle: nuevoTrabajo.estado, color_alerta: nuevoTrabajo.color, encargado: nuevoTrabajo.encargado }).eq("id", editandoTrabajoId);
+      await supabase.from("trabajos_curso").update(datosGuardar).eq("id", editandoTrabajoId);
       setEditandoTrabajoId(null);
     } else {
-      await supabase.from("trabajos_curso").insert([{ nombre_expediente: nuevoTrabajo.nombre, estado_detalle: nuevoTrabajo.estado, color_alerta: nuevoTrabajo.color, encargado: nuevoTrabajo.encargado }]);
+      await supabase.from("trabajos_curso").insert([datosGuardar]);
     }
-    setNuevoTrabajo({ nombre: "", estado: "", color: "verde", encargado: "Leo" });
+    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
     cargarDatos();
   };
 
   const iniciarEdicionTrabajo = (t: any) => {
     setEditandoTrabajoId(t.id);
-    setNuevoTrabajo({ nombre: t.nombre_expediente, estado: t.estado_detalle, color: t.color_alerta, encargado: t.encargado || "Leo" });
+    setNuevoTrabajo({ 
+      tipo: t.tipo || "", 
+      propietario: t.propietario || t.nombre_expediente || "", 
+      estado: t.estado_detalle || "", 
+      color: t.color_alerta || "verde", 
+      encargado: t.encargado || "Leo" 
+    });
     if (t.encargado === "Leo") setLeoAbierto(true);
     if (t.encargado === "Bruno") setBrunoAbierto(true);
   };
@@ -136,7 +153,8 @@ export default function DashboardAgrimensura() {
   };
 
   const finalizarTrabajo = async (t: any) => {
-    if (confirm(`¿Marcar el expediente "${t.nombre_expediente}" como FINALIZADO y enviarlo al historial?`)) {
+    const nombreMostrar = t.tipo ? `${t.tipo} de ${t.propietario}` : t.nombre_expediente;
+    if (confirm(`¿Marcar el expediente "${nombreMostrar}" como FINALIZADO y enviarlo al historial?`)) {
       await supabase.from("trabajos_curso").update({ finalizado: true, fecha_finalizacion: new Date().toISOString().split('T')[0] }).eq("id", t.id);
       cargarDatos();
     }
@@ -189,11 +207,7 @@ export default function DashboardAgrimensura() {
     if (f.es_gasto_5050) return { totalAportes: Number(f.caja), limpioLeo: 0, limpioBruno: 0 };
     const totalAportes = Number(f.caja) + Number(f.colegio) + Number(f.extra_leo || 0) + Number(f.extra_bruno || 0);
     const limpio = Number(f.ingreso_total) - totalAportes;
-    return { 
-      totalAportes: Math.round(totalAportes), 
-      limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.30), 
-      limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.70 : limpio * 0.30) 
-    };
+    return { totalAportes: Math.round(totalAportes), limpioLeo: Math.round(f.encargado === "Leo" ? limpio * 0.70 : limpio * 0.30), limpioBruno: Math.round(f.encargado === "Bruno" ? limpio * 0.70 : limpio * 0.30) };
   };
 
   const generarResumen = (lista: any[]) => {
@@ -209,26 +223,35 @@ export default function DashboardAgrimensura() {
   const trabajosLeo = trabajosActivos.filter(t => t.encargado === "Leo");
   const trabajosBruno = trabajosActivos.filter(t => t.encargado === "Bruno");
 
+  // Filtrado y agrupación del historial de Expedientes Finalizados
   const trabajosFiltrados = trabajosFinalizados.filter(t => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
-    const coincideTexto = t.nombre_expediente.toLowerCase().includes(filtroTexto.toLowerCase());
-    return coincideEncargado && coincideTexto;
+    const searchStr = `${t.tipo || ''} ${t.propietario || ''} ${t.nombre_expediente || ''}`.toLowerCase();
+    const coincideTexto = searchStr.includes(filtroTexto.toLowerCase());
+    const coincideMes = filtroMes === "" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroMes));
+    return coincideEncargado && coincideTexto && coincideMes;
   });
 
+  const trabajosPorAnio = trabajosFiltrados.reduce((acc, t) => {
+    const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
+    if (!acc[anio]) acc[anio] = [];
+    acc[anio].push(t);
+    return acc;
+  }, {} as Record<string, any[]>);
+  
+  const aniosOrdenados = Object.keys(trabajosPorAnio).sort((a, b) => b.localeCompare(a));
+  const toggleAnio = (anio: string) => setAniosAbiertos({ ...aniosAbiertos, [anio]: !aniosAbiertos[anio] });
+
   const historialAgrupado = historial.reduce((acc, item) => { const key = item.fecha_liquidacion || "anterior"; if (!acc[key]) acc[key] = []; acc[key].push(item); return acc; }, {});
-  const fechasOrdenadas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
+  const fechasOrdenadasFinanzas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
   const RenderEtapas = ({ t }: { t: any }) => {
     const etapas = [
-      { id: 'e_medido', label: 'Medido' }, 
-      { id: 'e_definido', label: 'Definido' }, 
-      { id: 'e_solicitado_ld', label: 'Solicitado LD' }, 
-      { id: 'e_fac', label: 'FAC' }, 
-      { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, 
-      { id: 'e_pedido_cc', label: 'Pedido CC' }, 
-      { id: 'e_aprobado', label: 'Aprobado' }, 
-      { id: 'e_cc_emitido', label: 'CC Emitido' }
+      { id: 'e_medido', label: 'Medido' }, { id: 'e_definido', label: 'Definido' }, 
+      { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' }, 
+      { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' }, 
+      { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
     ];
     return (
       <div className="flex gap-2 flex-wrap">
@@ -269,27 +292,23 @@ export default function DashboardAgrimensura() {
 
           {subTabTrabajos === "activos" && (
             <>
-              <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-6 rounded-xl shadow-lg flex gap-4 items-end border border-zinc-800">
-                <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Expediente</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.nombre} onChange={e => setNuevoTrabajo({...nuevoTrabajo, nombre: e.target.value})} placeholder="Ej: PH DELTA"/></div>
-                <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas / Nro (Opcional)</label><input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/></div>
-                <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Encargado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
-                <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Estado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Ingresado (Verde)</option><option value="amarillo">Pendiente (Amarillo)</option></select></div>
+              <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-6 rounded-xl shadow-lg flex gap-4 items-end border border-zinc-800 flex-wrap">
+                <div className="w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.tipo} onChange={e => setNuevoTrabajo({...nuevoTrabajo, tipo: e.target.value})} placeholder="Ej: M"/></div>
+                <div className="flex-1 min-w-[200px]"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.propietario} onChange={e => setNuevoTrabajo({...nuevoTrabajo, propietario: e.target.value})} placeholder="Ej: Juan Perez"/></div>
+                <div className="flex-1 min-w-[200px]"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas (Opcional)</label><input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/></div>
+                <div className="w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Encargado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
+                <div className="w-48"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Estado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Ingresado (Verde)</option><option value="amarillo">Pendiente (Amarillo)</option></select></div>
                 
                 <button type="submit" className={`px-6 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar" : "Agregar"}</button>
-                {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ nombre: "", estado: "", color: "verde", encargado: "Leo" });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
+                {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
               </form>
 
               <div className="space-y-6">
                 
                 {/* EXPEDIENTES LEO - CONTRAÍBLE */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                  <div 
-                    onClick={() => setLeoAbierto(!leoAbierto)} 
-                    className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none"
-                  >
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2">
-                      <span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo
-                    </h3>
+                  <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo</h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosLeo.length} Activos</span>
                   </div>
                   
@@ -300,7 +319,7 @@ export default function DashboardAgrimensura() {
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                             <td className="p-4 w-1/4">
                               <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                {t.nombre_expediente}
+                                {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
                               </div>
                               <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                             </td>
@@ -319,13 +338,8 @@ export default function DashboardAgrimensura() {
 
                 {/* EXPEDIENTES BRUNO - CONTRAÍBLE */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                  <div 
-                    onClick={() => setBrunoAbierto(!brunoAbierto)} 
-                    className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none"
-                  >
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2">
-                      <span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno
-                    </h3>
+                  <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno</h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosBruno.length} Activos</span>
                   </div>
                   
@@ -336,7 +350,7 @@ export default function DashboardAgrimensura() {
                           <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                             <td className="p-4 w-1/4">
                               <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                {t.nombre_expediente}
+                                {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
                               </div>
                               <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                             </td>
@@ -358,20 +372,25 @@ export default function DashboardAgrimensura() {
           )}
 
           {subTabTrabajos === "finalizados" && (
-            <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-              <div className="bg-[#222222] p-6 border-b border-zinc-800 flex justify-between items-end gap-4">
+            <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800 p-6">
+              <div className="flex justify-between items-start mb-6">
                 <div>
                   <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Historial Histórico</h3>
-                  <div className="flex gap-4">
+                  <div className="flex flex-wrap gap-4">
                     <div>
-                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Buscar Expediente</label>
-                      <input type="text" placeholder="Ej: Loteo San José..." value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)}
+                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Buscar (Propietario / Tipo)</label>
+                      <input type="text" placeholder="Ej: M, Juan Perez..." value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)}
                         className="border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm w-64"/>
                     </div>
                     <div>
-                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Filtrar por Encargado</label>
+                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Filtrar por Mes/Año</label>
+                      <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
+                        className="border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm w-40 cursor-pointer"/>
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Encargado</label>
                       <select value={filtroEncargado} onChange={e => setFiltroEncargado(e.target.value)}
-                        className="border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm w-40">
+                        className="border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm w-32">
                         <option value="Todos">Todos</option>
                         <option value="Leo">Leo</option>
                         <option value="Bruno">Bruno</option>
@@ -384,24 +403,48 @@ export default function DashboardAgrimensura() {
                 </div>
               </div>
 
-              {trabajosFiltrados.length === 0 ? (
-                <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase">No se encontraron expedientes</p>
+              {aniosOrdenados.length === 0 ? (
+                <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#222] rounded-lg">No se encontraron expedientes</p>
               ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead><tr className="bg-[#111111] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Expediente</th><th className="p-4">Encomienda</th><th className="p-4">Fecha Finalización</th><th className="p-4 w-16">Acción</th></tr></thead>
-                  <tbody>
-                    {trabajosFiltrados.map(t => (
-                      <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
-                        <td className="p-4">
-                            <span className="font-bold text-zinc-300 block">{t.nombre_expediente}</span>
-                        </td>
-                        <td className="p-4 text-zinc-400 font-bold">{t.encargado}</td>
-                        <td className="p-4 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}</td>
-                        <td className="p-4 text-center"><button onClick={() => eliminarTrabajo(t.id)} title="Eliminar definitivamente" className="text-lg opacity-30 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-4">
+                  {aniosOrdenados.map(anio => (
+                    <div key={anio} className="bg-[#111111] rounded-lg overflow-hidden border border-zinc-800">
+                      <div onClick={() => toggleAnio(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                        <h4 className="font-bold text-white uppercase tracking-widest text-sm flex items-center gap-2">
+                          <span className="text-[#727A4E] text-xs">{aniosAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                        </h4>
+                        <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosPorAnio[anio].length} Finalizados</span>
+                      </div>
+                      
+                      {aniosAbiertos[anio] && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left whitespace-nowrap">
+                            <thead>
+                              <tr className="bg-[#1A1A1A] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800">
+                                <th className="p-4 w-24">Tipo</th>
+                                <th className="p-4">Propietario</th>
+                                <th className="p-4">Encomienda</th>
+                                <th className="p-4">Fecha Finalización</th>
+                                <th className="p-4 w-16 text-center">Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {trabajosPorAnio[anio].map(t => (
+                                <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
+                                  <td className="p-4 font-black text-[#A4B070]">{t.tipo || '-'}</td>
+                                  <td className="p-4"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
+                                  <td className="p-4 text-zinc-400 font-bold">{t.encargado}</td>
+                                  <td className="p-4 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
+                                  <td className="p-4 text-center"><button onClick={() => eliminarTrabajo(t.id)} title="Eliminar definitivamente" className="text-lg opacity-30 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -561,7 +604,7 @@ export default function DashboardAgrimensura() {
       {activeTab === "historial" && (
         <div className="space-y-4">
           <h2 className="text-2xl font-black tracking-widest text-white mb-6 uppercase border-b border-zinc-800 pb-4">Finanzas Liquidadas</h2>
-          {fechasOrdenadas.map(fechaKey => {
+          {fechasOrdenadasFinanzas.map(fechaKey => {
             const trabajosDelBloque = historialAgrupado[fechaKey];
             const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liquidación ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
             const estaAbierto = semanasAbiertas[fechaKey] || false;
