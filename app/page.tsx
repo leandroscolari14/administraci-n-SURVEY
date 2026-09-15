@@ -19,6 +19,10 @@ export default function DashboardAgrimensura() {
   const [aniosAbiertos, setAniosAbiertos] = useState<Record<string, boolean>>({});
   const [mesesAbiertos, setMesesAbiertos] = useState<Record<string, boolean>>({});
   
+  // Acordeones para el Dashboard (Año -> Mes de finalizados)
+  const [aniosDashAbiertos, setAniosDashAbiertos] = useState<Record<string, boolean>>({});
+  const [mesesDashAbiertos, setMesesDashAbiertos] = useState<Record<string, boolean>>({});
+  
   const [aniosFinanzasAbiertos, setAniosFinanzasAbiertos] = useState<Record<string, boolean>>({});
   const [mesesFinanzasAbiertos, setMesesFinanzasAbiertos] = useState<Record<string, boolean>>({});
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
@@ -354,7 +358,7 @@ export default function DashboardAgrimensura() {
   };
 
   // ----------------------------------------------------
-  // DATOS PARA EL DASHBOARD
+  // DATOS PARA EL DASHBOARD (AGRUPADOS AÑO -> MES DINÁMICO)
   // ----------------------------------------------------
   const listaTrabajosParaDashboard = filtroAnioDashboard === "Todos" 
     ? trabajosFinalizados 
@@ -364,19 +368,19 @@ export default function DashboardAgrimensura() {
   const cantLeoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Leo").length;
   const cantBrunoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Bruno").length;
 
-  // Agrupar expedientes finalizados por mes para el dashboard estilo "septiembre: total 3 exp, leo 3, bruno 0"
-  const expedientesPorMesDash = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
-    const anioMes = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 7) : "Sin Fecha"; // Ej: "2026-09"
-    if (!acc[anioMes]) {
-      acc[anioMes] = { total: 0, leo: 0, bruno: 0 };
-    }
-    acc[anioMes].total += 1;
-    if (t.encargado === "Leo") acc[anioMes].leo += 1;
-    if (t.encargado === "Bruno") acc[anioMes].bruno += 1;
+  // Agrupamiento Año -> Mes para el dashboard de finalizados
+  const trabajosDashPorAnioYMes = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
+    const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
+    const mesNum = t.fecha_finalizacion ? t.fecha_finalizacion.substring(5, 7) : "00";
+    if (!acc[anio]) acc[anio] = {};
+    if (!acc[anio][mesNum]) acc[anio][mesNum] = [];
+    acc[anio][mesNum].push(t);
     return acc;
   }, {});
 
-  const mesesExpedientesOrdenados = Object.keys(expedientesPorMesDash).sort((a, b) => b.localeCompare(a));
+  const aniosDashOrdenados = Object.keys(trabajosDashPorAnioYMes).sort((a, b) => b.localeCompare(a));
+  const toggleAnioDash = (anio: string) => setAniosDashAbiertos({ ...aniosDashAbiertos, [anio]: !aniosDashAbiertos[anio] });
+  const toggleMesDash = (key: string) => setMesesDashAbiertos({ ...mesesDashAbiertos, [key]: !mesesDashAbiertos[key] });
 
   const tiposConteoDash = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
     const tp = (t.tipo || "Otro").trim().toUpperCase();
@@ -385,31 +389,8 @@ export default function DashboardAgrimensura() {
   }, {});
   const tiposOrdenadosDash = Object.entries(tiposConteoDash).sort((a: any, b: any) => b[1] - a[1]);
 
-  const listaFinanzasParaDashboard = filtroAnioDashboard === "Todos"
-    ? historial
-    : historial.filter((f: any) => f.fecha_liquidacion && f.fecha_liquidacion.startsWith(filtroAnioDashboard));
-
-  const balancePorMes = listaFinanzasParaDashboard.reduce((acc: any, f: any) => {
-    const mesKey = f.fecha_liquidacion ? f.fecha_liquidacion.substring(0, 7) : "Sin Fecha";
-    if (!acc[mesKey]) {
-      acc[mesKey] = { cobradoLeo: 0, cobradoBruno: 0, limpioLeo: 0, limpioBruno: 0, total: 0 };
-    }
-    const partes = calcularPartes(f);
-    if (!f.es_gasto_5050) {
-      acc[mesKey].limpioLeo += partes.limpioLeo;
-      acc[mesKey].limpioBruno += partes.limpioBruno;
-      if (f.encargado === "Leo") acc[mesKey].cobradoLeo += Number(f.ingreso_total);
-      else acc[mesKey].cobradoBruno += Number(f.ingreso_total);
-    }
-    acc[mesKey].total += 1;
-    return acc;
-  }, {});
-
-  const mesesFinanzasOrdenados = Object.keys(balancePorMes).sort((a, b) => b.localeCompare(a));
-
   const anosDisponibles = Array.from(new Set([
-    ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null),
-    ...historial.map((f: any) => f.fecha_liquidacion ? f.fecha_liquidacion.substring(0, 4) : null)
+    ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null)
   ])).filter(Boolean).sort((a: any, b: any) => b.localeCompare(a));
 
   return (
@@ -467,25 +448,81 @@ export default function DashboardAgrimensura() {
             </div>
           </div>
 
-          {/* EXPEDIENTES FINALIZADOS POR MES (DETALLE) */}
-          <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Expedientes Finalizados por Mes</h3>
-            {mesesExpedientesOrdenados.length === 0 ? (
-              <p className="text-zinc-500 text-sm">No hay expedientes finalizados en este período.</p>
+          {/* LISTA EXTRAÍBLE DE EXPEDIENTES FINALIZADOS POR AÑO -> MES */}
+          <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800 p-4 md:p-6">
+            <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Expedientes Finalizados por Año y Mes</h3>
+            
+            {aniosDashOrdenados.length === 0 ? (
+              <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#222] rounded-lg">No hay expedientes finalizados en este período</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {mesesExpedientesOrdenados.map((anioMes: string) => {
-                  const dataM = expedientesPorMesDash[anioMes];
-                  const [anioD, mesD] = anioMes.split("-");
-                  const nombreMes = nombresMeses[mesD] || mesD;
-                  const tituloCard = anioMes === "Sin Fecha" ? "Sin Fecha" : `${nombreMes} ${anioD}`;
+              <div className="space-y-4">
+                {aniosDashOrdenados.map(anio => {
+                  const mesesDelAnio = Object.keys(trabajosDashPorAnioYMes[anio]).sort((a, b) => b.localeCompare(a));
+                  const totalAnio = Object.values(trabajosDashPorAnioYMes[anio]).flat().length;
 
                   return (
-                    <div key={anioMes} className="bg-[#222] p-4 rounded-lg border border-zinc-800">
-                      <span className="text-xs text-[#727A4E] font-bold uppercase tracking-wider block mb-2">{tituloCard}</span>
-                      <div className="text-white font-bold text-sm">
-                        Total <span className="text-white font-black">{dataM.total} exp</span>, leo <span className="text-[#A4B070] font-black">{dataM.leo}</span>, bruno <span className="text-[#A4B070] font-black">{dataM.bruno}</span>
+                    <div key={anio} className="bg-[#111111] rounded-lg overflow-hidden border border-zinc-800">
+                      <div onClick={() => toggleAnioDash(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                        <h4 className="font-bold text-white uppercase tracking-widest text-sm flex items-center gap-2">
+                          <span className="text-[#727A4E] text-xs">{aniosDashAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                        </h4>
+                        <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
+                          {totalAnio} Exp.
+                        </span>
                       </div>
+                      
+                      {aniosDashAbiertos[anio] && (
+                        <div className="p-3 space-y-3">
+                          {mesesDelAnio.map(mesNum => {
+                            const keyMesDash = `${anio}-${mesNum}`;
+                            const listaMes = trabajosDashPorAnioYMes[anio][mesNum];
+                            const nombreMes = nombresMeses[mesNum] || mesNum;
+                            const totalMes = listaMes.length;
+                            const leoMes = listaMes.filter((t: any) => t.encargado === "Leo").length;
+                            const brunoMes = listaMes.filter((t: any) => t.encargado === "Bruno").length;
+
+                            return (
+                              <div key={keyMesDash} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
+                                <div onClick={() => toggleMesDash(keyMesDash)} className="p-3 bg-[#1D1D1D] flex justify-between items-center cursor-pointer hover:bg-[#252525] select-none">
+                                  <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                                    <span className="text-[#727A4E] text-[10px]">{mesesDashAbiertos[keyMesDash] ? '▼' : '▶'}</span> {nombreMes}
+                                  </span>
+                                  <div className="text-xs text-zinc-400 font-bold flex gap-3">
+                                    <span>Total <strong className="text-white">{totalMes} exp</strong></span>
+                                    <span>Leo <strong className="text-[#A4B070]">{leoMes}</strong></span>
+                                    <span>Bruno <strong className="text-[#A4B070]">{brunoMes}</strong></span>
+                                  </div>
+                                </div>
+
+                                {mesesDashAbiertos[keyMesDash] && (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left whitespace-nowrap min-w-[500px]">
+                                      <thead>
+                                        <tr className="bg-[#1A1A1A] text-[#727A4E] font-bold uppercase text-[10px] tracking-wider border-b border-zinc-800">
+                                          <th className="p-3 w-24">Tipo</th>
+                                          <th className="p-3">Propietario</th>
+                                          <th className="p-3">Encomienda</th>
+                                          <th className="p-3">Fecha Finalización</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {listaMes.map((t: any) => (
+                                          <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] text-xs">
+                                            <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
+                                            <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
+                                            <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
+                                            <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -506,43 +543,6 @@ export default function DashboardAgrimensura() {
                     <span className="text-2xl font-black text-white mt-1 block">{cantidad}</span>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-
-          {/* BALANCE POR MES */}
-          <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Balance Financiero Mensual</h3>
-            {mesesFinanzasOrdenados.length === 0 ? (
-              <p className="text-zinc-500 text-sm">No hay liquidaciones financieras registradas aún.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left whitespace-nowrap min-w-[600px]">
-                  <thead>
-                    <tr className="bg-[#222] text-[#727A4E] font-bold uppercase text-[10px] tracking-wider border-b border-zinc-800">
-                      <th className="p-3">Mes</th>
-                      <th className="p-3">Total Cierres</th>
-                      <th className="p-3">Limpio Leo (Gen.)</th>
-                      <th className="p-3">Limpio Bruno (Gen.)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mesesFinanzasOrdenados.map((mesKey: string) => {
-                      const dataMes = balancePorMes[mesKey];
-                      const [anioM, mesM] = mesKey.split("-");
-                      const nombreMesFormateado = `${nombresMeses[mesM] || mesM} ${anioM}`;
-
-                      return (
-                        <tr key={mesKey} className="border-b border-zinc-800 hover:bg-[#222] text-xs">
-                          <td className="p-3 font-bold text-white uppercase tracking-wider">{nombreMesFormateado}</td>
-                          <td className="p-3 text-zinc-400 font-bold">{dataMes.total} registros</td>
-                          <td className="p-3 font-black text-[#A4B070]">${formatearPlata(dataMes.limpioLeo)}</td>
-                          <td className="p-3 font-black text-[#A4B070]">${formatearPlata(dataMes.limpioBruno)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             )}
           </div>
