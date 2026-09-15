@@ -13,7 +13,6 @@ export default function DashboardAgrimensura() {
   const [activeTab, setActiveTab] = useState("trabajos");
   const [subTabTrabajos, setSubTabTrabajos] = useState("activos");
   
-  // Estados para listas contraíbles
   const [leoAbierto, setLeoAbierto] = useState(false);
   const [brunoAbierto, setBrunoAbierto] = useState(false);
   
@@ -51,7 +50,6 @@ export default function DashboardAgrimensura() {
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroTexto, setFiltroTexto] = useState("");
 
-  // Filtro de año para el Dashboard
   const [filtroAnioDashboard, setFiltroAnioDashboard] = useState("Todos");
 
   useEffect(() => { cargarDatos(); }, []);
@@ -286,7 +284,6 @@ export default function DashboardAgrimensura() {
   const trabajosLeo = trabajosActivos.filter((t: any) => t.encargado === "Leo");
   const trabajosBruno = trabajosActivos.filter((t: any) => t.encargado === "Bruno");
 
-  // FILTROS PARA EL HISTORIAL DE FINALIZADOS
   const trabajosFiltrados = trabajosFinalizados.filter((t: any) => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
     const coincideTipo = filtroTipo === "" || (t.tipo && t.tipo.toLowerCase().includes(filtroTipo.toLowerCase()));
@@ -357,7 +354,7 @@ export default function DashboardAgrimensura() {
   };
 
   // ----------------------------------------------------
-  // DATOS FILTRADOS PARA EL DASHBOARD (POR AÑO O TODO)
+  // DATOS PARA EL DASHBOARD
   // ----------------------------------------------------
   const listaTrabajosParaDashboard = filtroAnioDashboard === "Todos" 
     ? trabajosFinalizados 
@@ -366,8 +363,20 @@ export default function DashboardAgrimensura() {
   const totalTrabajosDash = listaTrabajosParaDashboard.length;
   const cantLeoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Leo").length;
   const cantBrunoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Bruno").length;
-  const porcLeo = totalTrabajosDash > 0 ? Math.round((cantLeoDash / totalTrabajosDash) * 100) : 0;
-  const porcBruno = totalTrabajosDash > 0 ? Math.round((cantBrunoDash / totalTrabajosDash) * 100) : 0;
+
+  // Agrupar expedientes finalizados por mes para el dashboard estilo "septiembre: total 3 exp, leo 3, bruno 0"
+  const expedientesPorMesDash = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
+    const anioMes = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 7) : "Sin Fecha"; // Ej: "2026-09"
+    if (!acc[anioMes]) {
+      acc[anioMes] = { total: 0, leo: 0, bruno: 0 };
+    }
+    acc[anioMes].total += 1;
+    if (t.encargado === "Leo") acc[anioMes].leo += 1;
+    if (t.encargado === "Bruno") acc[anioMes].bruno += 1;
+    return acc;
+  }, {});
+
+  const mesesExpedientesOrdenados = Object.keys(expedientesPorMesDash).sort((a, b) => b.localeCompare(a));
 
   const tiposConteoDash = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
     const tp = (t.tipo || "Otro").trim().toUpperCase();
@@ -376,13 +385,12 @@ export default function DashboardAgrimensura() {
   }, {});
   const tiposOrdenadosDash = Object.entries(tiposConteoDash).sort((a: any, b: any) => b[1] - a[1]);
 
-  // Balance mensual basado en el historial de finanzas filtrado por año
   const listaFinanzasParaDashboard = filtroAnioDashboard === "Todos"
     ? historial
     : historial.filter((f: any) => f.fecha_liquidacion && f.fecha_liquidacion.startsWith(filtroAnioDashboard));
 
   const balancePorMes = listaFinanzasParaDashboard.reduce((acc: any, f: any) => {
-    const mesKey = f.fecha_liquidacion ? f.fecha_liquidacion.substring(0, 7) : "Sin Fecha"; // Ej: "2026-09"
+    const mesKey = f.fecha_liquidacion ? f.fecha_liquidacion.substring(0, 7) : "Sin Fecha";
     if (!acc[mesKey]) {
       acc[mesKey] = { cobradoLeo: 0, cobradoBruno: 0, limpioLeo: 0, limpioBruno: 0, total: 0 };
     }
@@ -397,9 +405,8 @@ export default function DashboardAgrimensura() {
     return acc;
   }, {});
 
-  const mesesOrdenadosDash = Object.keys(balancePorMes).sort((a, b) => b.localeCompare(a));
+  const mesesFinanzasOrdenados = Object.keys(balancePorMes).sort((a, b) => b.localeCompare(a));
 
-  // Lista de años disponibles para el selector del dashboard
   const anosDisponibles = Array.from(new Set([
     ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null),
     ...historial.map((f: any) => f.fecha_liquidacion ? f.fecha_liquidacion.substring(0, 4) : null)
@@ -424,7 +431,7 @@ export default function DashboardAgrimensura() {
         </div>
       </header>
 
-      {/* PESTAÑA: DASHBOARD CON GRÁFICOS Y FILTRO DE AÑO */}
+      {/* PESTAÑA: DASHBOARD */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800 gap-4">
@@ -447,52 +454,37 @@ export default function DashboardAgrimensura() {
               <span className="text-4xl md:text-5xl font-black text-white">{totalTrabajosDash}</span>
             </div>
             
-            {/* GRÁFICO DE TORA / BARRAS: ENCARGADO LEO */}
-            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E]">Cerrados por Leo</span>
-                  <span className="text-xs font-bold text-white bg-[#222] px-2 py-0.5 rounded">{porcLeo}%</span>
-                </div>
-                <span className="text-3xl font-black text-[#A4B070]">{cantLeoDash} <span className="text-xs text-zinc-500 font-normal">expedientes</span></span>
-              </div>
-              <div className="w-full bg-[#222] h-3 rounded-full overflow-hidden mt-4 border border-zinc-800">
-                <div className="bg-[#727A4E] h-full transition-all duration-500" style={{ width: `${porcLeo}%` }}></div>
-              </div>
+            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 text-center shadow-lg">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Cerrados por Leo</span>
+              <span className="text-4xl md:text-5xl font-black text-[#A4B070]">{cantLeoDash}</span>
+              <span className="text-xs text-zinc-500 block mt-1">{totalTrabajosDash > 0 ? Math.round((cantLeoDash / totalTrabajosDash) * 100) : 0}% del total</span>
             </div>
 
-            {/* GRÁFICO DE TORA / BARRAS: ENCARGADO BRUNO */}
-            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E]">Cerrados por Bruno</span>
-                  <span className="text-xs font-bold text-white bg-[#222] px-2 py-0.5 rounded">{porcBruno}%</span>
-                </div>
-                <span className="text-3xl font-black text-[#A4B070]">{cantBrunoDash} <span className="text-xs text-zinc-500 font-normal">expedientes</span></span>
-              </div>
-              <div className="w-full bg-[#222] h-3 rounded-full overflow-hidden mt-4 border border-zinc-800">
-                <div className="bg-[#A4B070] h-full transition-all duration-500" style={{ width: `${porcBruno}%` }}></div>
-              </div>
+            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 text-center shadow-lg">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Cerrados por Bruno</span>
+              <span className="text-4xl md:text-5xl font-black text-[#A4B070]">{cantBrunoDash}</span>
+              <span className="text-xs text-zinc-500 block mt-1">{totalTrabajosDash > 0 ? Math.round((cantBrunoDash / totalTrabajosDash) * 100) : 0}% del total</span>
             </div>
           </div>
 
-          {/* TIPOS DE TRABAJO (GRÁFICO VISUAL) */}
+          {/* EXPEDIENTES FINALIZADOS POR MES (DETALLE) */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Distribución por Tipo de Trabajo</h3>
-            {tiposOrdenadosDash.length === 0 ? (
-              <p className="text-zinc-500 text-sm">No hay datos registrados aún para este período.</p>
+            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Expedientes Finalizados por Mes</h3>
+            {mesesExpedientesOrdenados.length === 0 ? (
+              <p className="text-zinc-500 text-sm">No hay expedientes finalizados en este período.</p>
             ) : (
-              <div className="space-y-4">
-                {tiposOrdenadosDash.map(([tipo, cantidad]: any) => {
-                  const porcentajeTipo = totalTrabajosDash > 0 ? Math.round((cantidad / totalTrabajosDash) * 100) : 0;
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {mesesExpedientesOrdenados.map((anioMes: string) => {
+                  const dataM = expedientesPorMesDash[anioMes];
+                  const [anioD, mesD] = anioMes.split("-");
+                  const nombreMes = nombresMeses[mesD] || mesD;
+                  const tituloCard = anioMes === "Sin Fecha" ? "Sin Fecha" : `${nombreMes} ${anioD}`;
+
                   return (
-                    <div key={tipo} className="bg-[#222] p-4 rounded-lg border border-zinc-800">
-                      <div className="flex justify-between items-center mb-2 text-xs font-bold">
-                        <span className="text-white uppercase tracking-wider">{tipo}</span>
-                        <span className="text-[#A4B070]">{cantidad} exp. ({porcentajeTipo}%)</span>
-                      </div>
-                      <div className="w-full bg-[#111] h-2 rounded-full overflow-hidden border border-zinc-700/50">
-                        <div className="bg-[#727A4E] h-full transition-all duration-500" style={{ width: `${porcentajeTipo}%` }}></div>
+                    <div key={anioMes} className="bg-[#222] p-4 rounded-lg border border-zinc-800">
+                      <span className="text-xs text-[#727A4E] font-bold uppercase tracking-wider block mb-2">{tituloCard}</span>
+                      <div className="text-white font-bold text-sm">
+                        Total <span className="text-white font-black">{dataM.total} exp</span>, leo <span className="text-[#A4B070] font-black">{dataM.leo}</span>, bruno <span className="text-[#A4B070] font-black">{dataM.bruno}</span>
                       </div>
                     </div>
                   );
@@ -501,10 +493,27 @@ export default function DashboardAgrimensura() {
             )}
           </div>
 
+          {/* DISTRIBUCIÓN POR TIPO DE TRABAJO */}
+          <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
+            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Cantidad por Tipo de Trabajo</h3>
+            {tiposOrdenadosDash.length === 0 ? (
+              <p className="text-zinc-500 text-sm">No hay datos registrados aún.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {tiposOrdenadosDash.map(([tipo, cantidad]: any) => (
+                  <div key={tipo} className="bg-[#222] p-4 rounded-lg border border-zinc-800 text-center">
+                    <span className="text-xs text-[#727A4E] font-bold block truncate">{tipo}</span>
+                    <span className="text-2xl font-black text-white mt-1 block">{cantidad}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* BALANCE POR MES */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
             <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Balance Financiero Mensual</h3>
-            {mesesOrdenadosDash.length === 0 ? (
+            {mesesFinanzasOrdenados.length === 0 ? (
               <p className="text-zinc-500 text-sm">No hay liquidaciones financieras registradas aún.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -518,7 +527,7 @@ export default function DashboardAgrimensura() {
                     </tr>
                   </thead>
                   <tbody>
-                    {mesesOrdenadosDash.map((mesKey: string) => {
+                    {mesesFinanzasOrdenados.map((mesKey: string) => {
                       const dataMes = balancePorMes[mesKey];
                       const [anioM, mesM] = mesKey.split("-");
                       const nombreMesFormateado = `${nombresMeses[mesM] || mesM} ${anioM}`;
