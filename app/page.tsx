@@ -16,8 +16,15 @@ export default function DashboardAgrimensura() {
   // Estados para listas contraíbles
   const [leoAbierto, setLeoAbierto] = useState(false);
   const [brunoAbierto, setBrunoAbierto] = useState(false);
+  
+  // Acordeones para expedientes finalizados
   const [aniosAbiertos, setAniosAbiertos] = useState<Record<string, boolean>>({});
   const [mesesAbiertos, setMesesAbiertos] = useState<Record<string, boolean>>({});
+  
+  // Acordeones para historial de finanzas (Año -> Mes -> Semana)
+  const [aniosFinanzasAbiertos, setAniosFinanzasAbiertos] = useState<Record<string, boolean>>({});
+  const [mesesFinanzasAbiertos, setMesesFinanzasAbiertos] = useState<Record<string, boolean>>({});
+  const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   
   const [trabajosActivos, setTrabajosActivos] = useState<any[]>([]);
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
@@ -27,7 +34,6 @@ export default function DashboardAgrimensura() {
   
   const [catastro, setCatastro] = useState({ usuario: "Libre", fecha: "" });
   const [tiempoUso, setTiempoUso] = useState("");
-  const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   
   const [archivoComprobante, setArchivoComprobante] = useState<File | null>(null);
 
@@ -288,7 +294,7 @@ export default function DashboardAgrimensura() {
     return coincideEncargado && coincideTipo && coincideTexto;
   });
 
-  // AGRUPAMIENTO ANIO -> MES PARA EL ACORDEÓN
+  // AGRUPAMIENTO ANIO -> MES PARA EXPEDIENTES
   const trabajosPorAnioYMes = trabajosFiltrados.reduce((acc: any, t: any) => {
     const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
     const mesNum = t.fecha_finalizacion ? t.fecha_finalizacion.substring(5, 7) : "00";
@@ -307,8 +313,29 @@ export default function DashboardAgrimensura() {
     "07": "Julio", "08": "Agosto", "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre", "00": "Sin Fecha"
   };
 
-  const historialAgrupado = historial.reduce((acc: any, item: any) => { const key = item.fecha_liquidacion || "anterior"; if (!acc[key]) acc[key] = []; acc[key].push(item); return acc; }, {});
-  const fechasOrdenadasFinanzas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
+  // AGRUPAMIENTO ANIO -> MES PARA HISTORIAL DE FINANZAS
+  const historialAgrupado = historial.reduce((acc: any, item: any) => {
+    const fechaLiq = item.fecha_liquidacion;
+    const anio = fechaLiq ? fechaLiq.substring(0, 4) : "Sin Fecha";
+    const mesNum = fechaLiq ? fechaLiq.substring(5, 7) : "00";
+    
+    if (!acc[anio]) acc[anio] = {};
+    if (!acc[anio][mesNum]) acc[anio][mesNum] = {};
+    
+    const semanaKey = fechaLiq || "anterior";
+    if (!acc[anio][mesNum][semanaKey]) acc[anio][mesNum][semanaKey] = [];
+    acc[anio][mesNum][semanaKey].push(item);
+    return acc;
+  }, {});
+
+  const aniosFinanzasOrdenados = Object.keys(historialAgrupado).sort((a, b) => {
+    if (a === "Sin Fecha") return 1;
+    if (b === "Sin Fecha") return -1;
+    return b.localeCompare(a);
+  });
+
+  const toggleAnioFinanzas = (anio: string) => setAniosFinanzasAbiertos({ ...aniosFinanzasAbiertos, [anio]: !aniosFinanzasAbiertos[anio] });
+  const toggleMesFinanzas = (key: string) => setMesesFinanzasAbiertos({ ...mesesFinanzasAbiertos, [key]: !mesesFinanzasAbiertos[key] });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
   const RenderEtapas = ({ t }: { t: any }) => {
@@ -330,12 +357,10 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  // DATOS PARA EL DASHBOARD DE ESTADÍSTICAS
   const totalTrabajosFinalizados = trabajosFinalizados.length;
   const cantLeo = trabajosFinalizados.filter((t: any) => t.encargado === "Leo").length;
   const cantBruno = trabajosFinalizados.filter((t: any) => t.encargado === "Bruno").length;
   
-  // Conteo por tipo de trabajo en el historial
   const tiposConteo = trabajosFinalizados.reduce((acc: any, t: any) => {
     const tp = (t.tipo || "Otro").trim().toUpperCase();
     acc[tp] = (acc[tp] || 0) + 1;
@@ -362,7 +387,7 @@ export default function DashboardAgrimensura() {
         </div>
       </header>
 
-      {/* PESTAÑA: DASHBOARD DE ESTADÍSTICAS */}
+      {/* PESTAÑA: DASHBOARD */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
           <h2 className="text-xl md:text-2xl font-black tracking-widest text-white uppercase border-b border-zinc-800 pb-4">Panel de Estadísticas y Rendimiento</h2>
@@ -766,88 +791,139 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: HISTORIAL FINANZAS */}
+      {/* PESTAÑA: HISTORIAL FINANZAS (AGRUPADO AÑO -> MES -> SEMANA) */}
       {activeTab === "historial" && (
         <div className="space-y-4">
           <h2 className="text-xl md:text-2xl font-black tracking-widest text-white mb-6 uppercase border-b border-zinc-800 pb-4">Finanzas Liquidadas</h2>
           
-          {fechasOrdenadasFinanzas.map(fechaKey => {
-            const trabajosDelBloque = historialAgrupado[fechaKey];
-            const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
-            const estaAbierto = semanasAbiertas[fechaKey] || false;
-            const resumenBloque = generarResumen(trabajosDelBloque);
-            const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
+          {aniosFinanzasOrdenados.length === 0 ? (
+            <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#1A1A1A] rounded-xl border border-zinc-800">No hay historial de finanzas</p>
+          ) : (
+            <div className="space-y-4">
+              {aniosFinanzasOrdenados.map(anio => {
+                const mesesDelAnio = Object.keys(historialAgrupado[anio]).sort((a, b) => b.localeCompare(a));
+                return (
+                  <div key={anio} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
+                    <div onClick={() => toggleAnioFinanzas(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                      <h3 className="font-bold text-white uppercase tracking-widest text-sm md:text-base flex items-center gap-2">
+                        <span className="text-[#727A4E] text-xs">{aniosFinanzasAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                      </h3>
+                      <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
+                        {Object.values(historialAgrupado[anio]).map((m: any) => Object.values(m).flat()).flat().length} Registros
+                      </span>
+                    </div>
 
-            return (
-              <div key={fechaKey} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                <div className="bg-[#222222] p-4 md:p-5 border-b-2 border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-4 md:gap-0">
-                  <h3 onClick={() => toggleHistorial(fechaKey)} className="font-bold text-sm md:text-lg cursor-pointer flex-1 tracking-widest uppercase flex items-center gap-2 md:gap-3 hover:text-[#727A4E] w-full">
-                    {tituloBloque} 
-                    {comprobanteUrl && <span className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[10px] px-2 py-0.5 rounded font-bold">📎 Con Comprobante</span>}
-                    <span className="text-zinc-400 text-[10px] md:text-xs font-bold px-2 py-1 bg-[#1A1A1A] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
-                  </h3>
-                  <div className="flex gap-2 md:gap-3 w-full md:w-auto justify-end">
-                    <button onClick={() => reabrirSemana(fechaKey)} className="flex-1 md:flex-none bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1.5 md:px-4 md:py-1.5 text-[10px] md:text-xs tracking-wider font-bold rounded uppercase text-center">Reabrir</button>
-                    <button onClick={() => eliminarSemana(fechaKey)} className="flex-1 md:flex-none bg-red-900/20 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1.5 md:px-4 md:py-1.5 text-[10px] md:text-xs tracking-wider font-bold rounded uppercase text-center">Borrar</button>
-                  </div>
-                </div>
-                
-                {estaAbierto && (
-                  <div>
-                    <div className="bg-[#1A1A1A] p-4 md:p-6 border-b border-zinc-800 flex flex-col lg:flex-row gap-6 justify-between items-center">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full lg:w-auto flex-1">
-                        <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
-                          <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO LEO (SEMANA)</span>
-                          <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
-                          <p className={`text-base font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                            {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
-                          </p>
-                        </div>
-                        <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
-                          <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO BRUNO (SEMANA)</span>
-                          <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
-                          <p className={`text-base font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                            {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
-                          </p>
-                        </div>
+                    {aniosFinanzasAbiertos[anio] && (
+                      <div className="p-3 space-y-3">
+                        {mesesDelAnio.map(mesNum => {
+                          const keyMesFinanza = `${anio}-${mesNum}`;
+                          const semanasDelMes = historialAgrupado[anio][mesNum];
+                          const nombresSemanas = Object.keys(semanasDelMes).sort((a, b) => {
+                            if (a === "anterior") return 1;
+                            if (b === "anterior") return -1;
+                            return new Date(b).getTime() - new Date(a).getTime();
+                          });
+                          const nombreMes = nombresMeses[mesNum] || mesNum;
+
+                          return (
+                            <div key={keyMesFinanza} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
+                              <div onClick={() => toggleMesFinanzas(keyMesFinanza)} className="p-3 bg-[#1D1D1D] flex justify-between cursor-pointer hover:bg-[#252525] select-none">
+                                <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                                  <span className="text-[#727A4E] text-[10px]">{mesesFinanzasAbiertos[keyMesFinanza] ? '▼' : '▶'}</span> {nombreMes}
+                                </span>
+                                <span className="text-xs text-zinc-500 font-bold">{nombresSemanas.length} Semanas</span>
+                              </div>
+
+                              {mesesFinanzasAbiertos[keyMesFinanza] && (
+                                <div className="p-3 space-y-3">
+                                  {nombresSemanas.map(fechaKey => {
+                                    const trabajosDelBloque = semanasDelMes[fechaKey];
+                                    const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
+                                    const estaAbierto = semanasAbiertas[fechaKey] || false;
+                                    const resumenBloque = generarResumen(trabajosDelBloque);
+                                    const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
+
+                                    return (
+                                      <div key={fechaKey} className="bg-[#111111] rounded-xl shadow-md overflow-hidden border border-zinc-800 ml-2 md:ml-4">
+                                        <div className="bg-[#1F1F1F] p-3 md:p-4 border-b border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-3 md:gap-0">
+                                          <h4 onClick={() => toggleHistorial(fechaKey)} className="font-bold text-xs md:text-sm cursor-pointer flex-1 tracking-widest uppercase flex items-center gap-2 hover:text-[#727A4E] w-full">
+                                            {tituloBloque} 
+                                            {comprobanteUrl && <span className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[9px] px-2 py-0.5 rounded font-bold">📎 Con Comprobante</span>}
+                                            <span className="text-zinc-400 text-[10px] font-bold px-2 py-0.5 bg-[#111] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
+                                          </h4>
+                                          <div className="flex gap-2 w-full md:w-auto justify-end">
+                                            <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
+                                            <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
+                                          </div>
+                                        </div>
+                                        
+                                        {estaAbierto && (
+                                          <div>
+                                            <div className="bg-[#1A1A1A] p-4 border-b border-zinc-800 flex flex-col lg:flex-row gap-6 justify-between items-center">
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full lg:w-auto flex-1">
+                                                <div className="bg-[#222] p-3 rounded-lg border border-zinc-800 text-center sm:text-left">
+                                                  <span className="text-[10px] font-black tracking-widest text-[#727A4E] block mb-1">SOCIO LEO (SEMANA)</span>
+                                                  <p className="text-xs text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
+                                                  <p className={`text-sm font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                                                    {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
+                                                  </p>
+                                                </div>
+                                                <div className="bg-[#222] p-3 rounded-lg border border-zinc-800 text-center sm:text-left">
+                                                  <span className="text-[10px] font-black tracking-widest text-[#727A4E] block mb-1">SOCIO BRUNO (SEMANA)</span>
+                                                  <p className="text-xs text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
+                                                  <p className={`text-sm font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                                                    {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
+                                                  </p>
+                                                </div>
+                                              </div>
+
+                                              {comprobanteUrl && (
+                                                <div className="flex flex-col items-center justify-center bg-[#222] p-3 rounded-lg border border-zinc-800 w-full lg:w-40">
+                                                  <span className="text-[9px] font-bold text-zinc-400 mb-1 uppercase tracking-wider">Comprobante</span>
+                                                  <a href={comprobanteUrl} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-3 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase text-center w-full">
+                                                    🔍 Ver Imagen
+                                                  </a>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            <div className="overflow-x-auto">
+                                              <table className="w-full text-left whitespace-nowrap min-w-[700px]">
+                                                <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
+                                                <tbody>
+                                                  {trabajosDelBloque.map((h: any) => {
+                                                    const partes = calcularPartes(h);
+                                                    return (
+                                                      <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
+                                                        <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
+                                                        <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
+                                                        <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
+                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                                        <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
+                                                        <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-
-                      {comprobanteUrl && (
-                        <div className="flex flex-col items-center justify-center bg-[#222] p-4 rounded-xl border border-zinc-800 w-full lg:w-48">
-                          <span className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider">Comprobante</span>
-                          <a href={comprobanteUrl} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-4 py-2 rounded text-xs tracking-wider font-bold uppercase text-center w-full">
-                            🔍 Ver Imagen
-                          </a>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left whitespace-nowrap min-w-[700px]">
-                        <thead><tr className="bg-[#222222] text-zinc-400 uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Entró Por</th><th className="p-4">Total/Gasto</th><th className="p-4">Limpio Leo</th><th className="p-4">Limpio Bruno</th></tr></thead>
-                        <tbody>
-                          {trabajosDelBloque.map((h: any) => {
-                            const partes = calcularPartes(h);
-                            return (
-                              <tr key={h.id} className={`border-b border-zinc-800 ${h.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
-                                <td className="p-4 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded">50/50</span>}</td>
-                                <td className="p-4 text-zinc-400">{h.es_gusto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
-                                <td className="p-4 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                <td className={`p-4 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
-                                <td className="p-4 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
-                                <td className="p-4 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
