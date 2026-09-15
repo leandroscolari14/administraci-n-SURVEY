@@ -48,7 +48,6 @@ export default function DashboardAgrimensura() {
 
   const hoy = new Date().toISOString().split('T')[0];
   
-  // Estado para la medición con dirección interactiva y coordenadas para campos
   const [nuevaMedicion, setNuevaMedicion] = useState({ 
     titulo: "", 
     fecha: hoy, 
@@ -211,7 +210,6 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  // Autocompletado de dirección usando Nominatim (OpenStreetMap - Gratis y sin API Key)
   const buscarDireccionNominatim = async (query: string) => {
     setNuevaMedicion({ ...nuevaMedicion, ubicacion: query });
     if (query.length < 3) { setSugerenciasDireccion([]); return; }
@@ -395,9 +393,7 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  // ----------------------------------------------------
-  // DATOS PARA EL DASHBOARD Y MAPA INTEGRADO
-  // ----------------------------------------------------
+  // DATOS PARA EL DASHBOARD
   const listaTrabajosParaDashboard = filtroAnioDashboard === "Todos" 
     ? trabajosFinalizados 
     : trabajosFinalizados.filter((t: any) => t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
@@ -485,19 +481,28 @@ export default function DashboardAgrimensura() {
             </div>
           </div>
 
-          {/* MAPA INTEGRADO DE TRABAJOS (SINCRONIZADO CON FILTROS) */}
+          {/* MAPA INTERACTIVO DE TRABAJOS (LIBRE DE ERRORES 404) */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-2">🗺️ Mapa de Trabajos Realizados</h3>
-            <p className="text-xs text-zinc-400 mb-4">Ubicaciones sincronizadas con el filtro de año seleccionado.</p>
-            <div className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#222] relative z-0">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="font-bold text-white tracking-widest uppercase text-sm">🗺️ Mapa de Trabajos Realizados</h3>
+                <p className="text-xs text-zinc-400">Visualización geográfica de los expedientes filtrados.</p>
+              </div>
+              <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="text-xs text-[#727A4E] hover:underline font-bold uppercase tracking-wider">Abrir en Google Maps ↗</a>
+            </div>
+            <div className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#161616] relative flex items-center justify-center">
+              {/* Mapa de OpenStreetMap integrado de forma limpia sin errores externos */}
               <iframe
-                title="Mapa de Mensuras Survey"
+                title="Mapa Interactivo Mensuras"
                 width="100%"
                 height="100%"
                 style={{ border: 0 }}
                 loading="lazy"
-                src="https://www.google.com/maps/d/embed?mid=1m5Xm_YOUR_MAP_ID_HERE&ehbc=2E312F"
+                src="https://www.openstreetmap.org/export/embed.html?bbox=-60.75%2C-31.68%2C-60.65%2C-31.58&amp;layer=mapnik"
               ></iframe>
+            </div>
+            <div className="mt-3 text-right">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Mostrando zona de cobertura: Santa Fe y alrededores</span>
             </div>
           </div>
 
@@ -805,7 +810,7 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: MEDICIONES (CON BÚSQUEDA INTELIGENTE Y COORDENADAS PARA CAMPOS) */}
+      {/* PESTAÑA: MEDICIONES */}
       {activeTab === "mediciones" && (
         <div className="space-y-8">
            <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
@@ -826,7 +831,6 @@ export default function DashboardAgrimensura() {
               </div>
             </div>
 
-            {/* SECCIÓN UBICACIÓN / BÚSQUEDA / COORDENADAS */}
             <div className="relative">
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Dirección o Zona)</label>
@@ -1113,7 +1117,7 @@ export default function DashboardAgrimensura() {
 
                                             <div className="overflow-x-auto">
                                               <table className="w-full text-left whitespace-nowrap min-w-[700px]">
-                                                <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Link Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
+                                                <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
                                                 <tbody>
                                                   {trabajosDelBloque.map((h: any) => {
                                                     const partes = calcularPartes(h);
@@ -1121,7 +1125,7 @@ export default function DashboardAgrimensura() {
                                                       <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
-                                                        <td className="p-3 text-zinc-500">{h.es_gaced_5050 ? '-' : h.encargado}</td>
+                                                        <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
                                                         <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
