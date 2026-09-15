@@ -19,7 +19,6 @@ export default function DashboardAgrimensura() {
   const [aniosAbiertos, setAniosAbiertos] = useState<Record<string, boolean>>({});
   const [mesesAbiertos, setMesesAbiertos] = useState<Record<string, boolean>>({});
   
-  // Acordeones para el Dashboard (Año -> Mes de finalizados)
   const [aniosDashAbiertos, setAniosDashAbiertos] = useState<Record<string, boolean>>({});
   const [mesesDashAbiertos, setMesesDashAbiertos] = useState<Record<string, boolean>>({});
   
@@ -48,7 +47,18 @@ export default function DashboardAgrimensura() {
   const [nuevaFinanza, setNuevaFinanza] = useState({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });
 
   const hoy = new Date().toISOString().split('T')[0];
-  const [nuevaMedicion, setNuevaMedicion] = useState({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "" });
+  
+  // Estado para la medición con dirección interactiva y coordenadas para campos
+  const [nuevaMedicion, setNuevaMedicion] = useState({ 
+    titulo: "", 
+    fecha: hoy, 
+    hora: "14:00", 
+    ubicacion: "", 
+    lat: "", 
+    lng: "", 
+    modoCoordenadas: false 
+  });
+  const [sugerenciasDireccion, setSugerenciasDireccion] = useState<any[]>([]);
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -201,13 +211,41 @@ export default function DashboardAgrimensura() {
     }
   };
 
+  // Autocompletado de dirección usando Nominatim (OpenStreetMap - Gratis y sin API Key)
+  const buscarDireccionNominatim = async (query: string) => {
+    setNuevaMedicion({ ...nuevaMedicion, ubicacion: query });
+    if (query.length < 3) { setSugerenciasDireccion([]); return; }
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=ar&limit=5`);
+      const data = await res.json();
+      setSugerenciasDireccion(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const seleccionarSugerencia = (item: any) => {
+    setNuevaMedicion({
+      ...nuevaMedicion,
+      ubicacion: item.display_name,
+      lat: item.lat,
+      lng: item.lon
+    });
+    setSugerenciasDireccion([]);
+  };
+
   const guardarMedicion = async (e: any) => {
     e.preventDefault();
-    const { error } = await supabase.from("mediciones").insert([{ titulo: nuevaMedicion.titulo, fecha: nuevaMedicion.fecha, hora: nuevaMedicion.hora, ubicacion: nuevaMedicion.ubicacion }]);
+    const { error } = await supabase.from("mediciones").insert([{ 
+      titulo: nuevaMedicion.titulo, 
+      fecha: nuevaMedicion.fecha, 
+      hora: nuevaMedicion.hora, 
+      ubicacion: nuevaMedicion.ubicacion,
+      lat: nuevaMedicion.lat ? Number(nuevaMedicion.lat) : null,
+      lng: nuevaMedicion.lng ? Number(nuevaMedicion.lng) : null
+    }]);
     if (error) return alert(`Error al guardar: ${error.message}`);
     const [anio, mes, dia] = nuevaMedicion.fecha.split("-");
     await enviarTelegram(`📐 *NUEVA MEDICIÓN PROGRAMADA*\n\n**Expediente:** ${nuevaMedicion.titulo}\n**Fecha:** ${dia}/${mes}/${anio} a las ${nuevaMedicion.hora}hs\n**Lugar:** ${nuevaMedicion.ubicacion}`);
-    setNuevaMedicion({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "" });
+    setNuevaMedicion({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });
     cargarDatos();
   };
 
@@ -358,7 +396,7 @@ export default function DashboardAgrimensura() {
   };
 
   // ----------------------------------------------------
-  // DATOS PARA EL DASHBOARD (AGRUPADOS AÑO -> MES DINÁMICO)
+  // DATOS PARA EL DASHBOARD Y MAPA INTEGRADO
   // ----------------------------------------------------
   const listaTrabajosParaDashboard = filtroAnioDashboard === "Todos" 
     ? trabajosFinalizados 
@@ -368,7 +406,6 @@ export default function DashboardAgrimensura() {
   const cantLeoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Leo").length;
   const cantBrunoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Bruno").length;
 
-  // Agrupamiento Año -> Mes para el dashboard de finalizados
   const trabajosDashPorAnioYMes = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
     const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
     const mesNum = t.fecha_finalizacion ? t.fecha_finalizacion.substring(5, 7) : "00";
@@ -412,13 +449,13 @@ export default function DashboardAgrimensura() {
         </div>
       </header>
 
-      {/* PESTAÑA: DASHBOARD */}
+      {/* PESTAÑA: DASHBOARD & MAPA */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800 gap-4">
             <h2 className="text-lg md:text-xl font-black tracking-widest text-white uppercase">Panel de Estadísticas y Rendimiento</h2>
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <label className="text-xs uppercase tracking-wider font-bold text-zinc-400">Filtrar:</label>
+              <label className="text-xs uppercase tracking-wider font-bold text-zinc-400">Filtrar Año:</label>
               <select value={filtroAnioDashboard} onChange={e => setFiltroAnioDashboard(e.target.value)}
                 className="bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#727A4E] cursor-pointer">
                 <option value="Todos">Todo el Historial</option>
@@ -445,6 +482,22 @@ export default function DashboardAgrimensura() {
               <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Cerrados por Bruno</span>
               <span className="text-4xl md:text-5xl font-black text-[#A4B070]">{cantBrunoDash}</span>
               <span className="text-xs text-zinc-500 block mt-1">{totalTrabajosDash > 0 ? Math.round((cantBrunoDash / totalTrabajosDash) * 100) : 0}% del total</span>
+            </div>
+          </div>
+
+          {/* MAPA INTEGRADO DE TRABAJOS (SINCRONIZADO CON FILTROS) */}
+          <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
+            <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-2">🗺️ Mapa de Trabajos Realizados</h3>
+            <p className="text-xs text-zinc-400 mb-4">Ubicaciones sincronizadas con el filtro de año seleccionado.</p>
+            <div className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#222] relative z-0">
+              <iframe
+                title="Mapa de Mensuras Survey"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                src="https://www.google.com/maps/d/embed?mid=1m5Xm_YOUR_MAP_ID_HERE&ehbc=2E312F"
+              ></iframe>
             </div>
           </div>
 
@@ -752,17 +805,66 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: MEDICIONES */}
+      {/* PESTAÑA: MEDICIONES (CON BÚSQUEDA INTELIGENTE Y COORDENADAS PARA CAMPOS) */}
       {activeTab === "mediciones" && (
         <div className="space-y-8">
-           <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col md:flex-row gap-4 md:items-end border border-zinc-800">
-            <div className="w-full md:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Expediente / Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaMedicion.titulo} onChange={e => setNuevaMedicion({...nuevaMedicion, titulo: e.target.value})} placeholder="Ej: PH DELTA"/></div>
-            <div className="w-full md:w-auto flex gap-4">
-                <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Fecha</label><input type="date" required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] cursor-pointer" value={nuevaMedicion.fecha} onChange={e => setNuevaMedicion({...nuevaMedicion, fecha: e.target.value})} onClick={(e: any) => e.target.showPicker && e.target.showPicker()}/></div>
-                <div className="flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Hora</label><select required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] cursor-pointer" value={nuevaMedicion.hora} onChange={e => setNuevaMedicion({...nuevaMedicion, hora: e.target.value})}>{Array.from({ length: 28 }).map((_, i) => { const h = Math.floor(i / 2) + 7; const m = i % 2 === 0 ? "00" : "30"; const hStr = `${h.toString().padStart(2, '0')}:${m}`; return <option key={hStr} value={hStr}>{hStr} hs</option>; })}</select></div>
+           <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Expediente / Propietario</label>
+                <input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaMedicion.titulo} onChange={e => setNuevaMedicion({...nuevaMedicion, titulo: e.target.value})} placeholder="Ej: PH DELTA"/>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Fecha</label>
+                <input type="date" required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] cursor-pointer" value={nuevaMedicion.fecha} onChange={e => setNuevaMedicion({...nuevaMedicion, fecha: e.target.value})} onClick={(e: any) => e.target.showPicker && e.target.showPicker()}/>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Hora</label>
+                <select required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] cursor-pointer" value={nuevaMedicion.hora} onChange={e => setNuevaMedicion({...nuevaMedicion, hora: e.target.value})}>
+                  {Array.from({ length: 28 }).map((_, i) => { const h = Math.floor(i / 2) + 7; const m = i % 2 === 0 ? "00" : "30"; const hStr = `${h.toString().padStart(2, '0')}:${m}`; return <option key={hStr} value={hStr}>{hStr} hs</option>; })}
+                </select>
+              </div>
             </div>
-            <div className="w-full md:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Opcional)</label><input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaMedicion.ubicacion} onChange={e => setNuevaMedicion({...nuevaMedicion, ubicacion: e.target.value})} placeholder="Ej: San Martin 2314"/></div>
-            <button type="submit" className="w-full md:w-auto px-6 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors bg-[#727A4E] hover:bg-[#8B9461]">AGENDAR</button>
+
+            {/* SECCIÓN UBICACIÓN / BÚSQUEDA / COORDENADAS */}
+            <div className="relative">
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Dirección o Zona)</label>
+                <button type="button" onClick={() => setNuevaMedicion({...nuevaMedicion, modoCoordenadas: !nuevaMedicion.modoCoordenadas})} className="text-[10px] text-zinc-400 hover:text-white underline">
+                  {nuevaMedicion.modoCoordenadas ? "🔍 Volver a Buscar Dirección" : "📌 Es un Campo / Ingresar Coordenadas"}
+                </button>
+              </div>
+
+              {!nuevaMedicion.modoCoordenadas ? (
+                <div>
+                  <input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaMedicion.ubicacion} onChange={e => buscarDireccionNominatim(e.target.value)} placeholder="Ej: San Martin 2314, Santa Fe..."/>
+                  {sugerenciasDireccion.length > 0 && (
+                    <div className="absolute left-0 right-0 bg-[#222] border border-zinc-700 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                      {sugerenciasDireccion.map((item: any, idx: number) => (
+                        <div key={idx} onClick={() => seleccionarSugerencia(item)} className="p-2.5 text-xs text-zinc-300 hover:bg-[#333] cursor-pointer border-b border-zinc-800 last:border-0">
+                          📍 {item.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#222] p-4 rounded-lg border border-zinc-700">
+                  <div>
+                    <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Latitud (ej: -31.6333)</label>
+                    <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevaMedicion.lat} onChange={e => setNuevaMedicion({...nuevaMedicion, lat: e.target.value})} placeholder="-31.6333"/>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Longitud (ej: -60.7000)</label>
+                    <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevaMedicion.lng} onChange={e => setNuevaMedicion({...nuevaMedicion, lng: e.target.value})} placeholder="-60.7000"/>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-2">
+              <button type="submit" className="px-8 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors bg-[#727A4E] hover:bg-[#8B9461]">AGENDAR MEDICIÓN</button>
+            </div>
           </form>
 
           <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
@@ -776,7 +878,7 @@ export default function DashboardAgrimensura() {
                       const [anio, mes, dia] = m.fecha.split("-");
                       return (
                         <tr key={m.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
-                          <td className="p-4 font-bold text-zinc-200">{m.titulo}</td><td className="p-4 text-white font-bold">{`${dia}/${mes}/${anio}`}</td><td className="p-4 text-zinc-300">{m.hora} hs</td><td className="p-4 text-zinc-400">{m.ubicacion || "-"}</td>
+                          <td className="p-4 font-bold text-zinc-200">{m.titulo}</td><td className="p-4 text-white font-bold">{`${dia}/${mes}/${anio}`}</td><td className="p-4 text-zinc-300">{m.hora} hs</td><td className="p-4 text-zinc-400">{m.ubicacion || (m.lat ? `Coordenadas: ${m.lat}, ${m.lng}` : "-")}</td>
                           <td className="p-4 flex gap-3 items-center">
                             <a href={generarLinkCalendar(m)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-3 py-1.5 rounded text-xs tracking-wider font-bold uppercase">📅 Calendar</a>
                             <button onClick={() => completarMedicion(m.id)} className="bg-[#727A4E]/20 hover:bg-[#727A4E]/40 text-[#A4B070] border border-[#727A4E]/50 px-3 py-1.5 rounded text-xs tracking-wider font-bold uppercase">✅ Listo</button>
@@ -1011,7 +1113,7 @@ export default function DashboardAgrimensura() {
 
                                             <div className="overflow-x-auto">
                                               <table className="w-full text-left whitespace-nowrap min-w-[700px]">
-                                                <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
+                                                <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Link Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
                                                 <tbody>
                                                   {trabajosDelBloque.map((h: any) => {
                                                     const partes = calcularPartes(h);
@@ -1019,7 +1121,7 @@ export default function DashboardAgrimensura() {
                                                       <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
-                                                        <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
+                                                        <td className="p-3 text-zinc-500">{h.es_gaced_5050 ? '-' : h.encargado}</td>
                                                         <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
