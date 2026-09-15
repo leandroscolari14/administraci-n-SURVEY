@@ -63,7 +63,10 @@ export default function DashboardAgrimensura() {
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroTexto, setFiltroTexto] = useState("");
 
+  // Nuevos Filtros para el Dashboard y Mapa
   const [filtroAnioDashboard, setFiltroAnioDashboard] = useState("Todos");
+  const [filtroSocioDashboard, setFiltroSocioDashboard] = useState("Todos");
+  const [filtroTipoDashboard, setFiltroTipoDashboard] = useState("Todos");
 
   // Referencia para el mapa Leaflet
   const mapRef = useRef<any>(null);
@@ -397,10 +400,15 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  // DATOS PARA EL DASHBOARD
-  const listaTrabajosParaDashboard = filtroAnioDashboard === "Todos" 
-    ? trabajosFinalizados 
-    : trabajosFinalizados.filter((t: any) => t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
+  // ----------------------------------------------------
+  // FILTROS AVANZADOS PARA EL DASHBOARD Y MAPA
+  // ----------------------------------------------------
+  const listaTrabajosParaDashboard = trabajosFinalizados.filter((t: any) => {
+    const coincideAnio = filtroAnioDashboard === "Todos" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
+    const coincideSocio = filtroSocioDashboard === "Todos" || t.encargado === filtroSocioDashboard;
+    const coincideTipo = filtroTipoDashboard === "Todos" || (t.tipo && t.tipo.trim().toUpperCase() === filtroTipoDashboard.toUpperCase());
+    return coincideAnio && coincideSocio && coincideTipo;
+  });
 
   const totalTrabajosDash = listaTrabajosParaDashboard.length;
   const cantLeoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Leo").length;
@@ -430,11 +438,28 @@ export default function DashboardAgrimensura() {
     ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null)
   ])).filter(Boolean).sort((a: any, b: any) => b.localeCompare(a));
 
-  // RENDERIZAR MAPA LEAFLET DINÁMICO CON PUNTOS
+  const tiposDisponibles = Array.from(new Set([
+    ...trabajosFinalizados.map((t: any) => t.tipo ? t.tipo.trim().toUpperCase() : null)
+  ])).filter(Boolean).sort();
+
+  // Función para asignar colores personalizados según el Tipo de Trabajo
+  const obtenerColorPin = (tipo: string) => {
+    const tp = (tipo || "").trim().toUpperCase();
+    if (tp.includes("VEP")) return "#3b82f6"; // Azul
+    if (tp.includes("REP")) return "#10b981"; // Verde esmeralda
+    if (tp.includes("PH")) return "#f59e0b";  // Naranja
+    if (tp.includes("DIV")) return "#8b5cf6"; // Violeta
+    if (tp.includes("CCU")) return "#ec4899"; // Rosa
+    if (tp.includes("CL")) return "#14b8a6";  // Turquesa
+    if (tp.includes("SIMPLE")) return "#64748b"; // Gris
+    if (tp.includes("EXPROPIACION")) return "#ef4444"; // Rojo
+    return "#eab308"; // Amarillo por defecto
+  };
+
+  // RENDERIZAR MAPA LEAFLET DINÁMICO CON PINES DE COLORES SEGÚN TIPO
   useEffect(() => {
     if (activeTab !== "dashboard") return;
 
-    // Cargar Leaflet CSS si no está
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link");
       link.id = "leaflet-css";
@@ -443,7 +468,6 @@ export default function DashboardAgrimensura() {
       document.head.appendChild(link);
     }
 
-    // Cargar Leaflet JS si no está
     const initMapWithLeaflet = () => {
       if (!(window as any).L || !mapContainerRef.current) return;
 
@@ -453,7 +477,7 @@ export default function DashboardAgrimensura() {
       }
 
       const L = (window as any).L;
-      const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12); // Santa Fe centro
+      const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12);
       mapRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -461,11 +485,21 @@ export default function DashboardAgrimensura() {
         attribution: '&copy; OpenStreetMap'
       }).addTo(map);
 
-      // Agregar marcadores basados en listaTrabajosParaDashboard que tengan lat y lng
+      // Agregar marcadores con círculos de colores según tipo de trabajo
       listaTrabajosParaDashboard.forEach((t: any) => {
         if (t.lat && t.lng) {
-          const marker = L.marker([Number(t.lat), Number(t.lng)]).addTo(map);
-          marker.bindPopup(`<b>${t.tipo || 'TRABAJO'}</b><br>${t.propietario || t.nombre_expediente}<br><small>Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
+          const colorPin = obtenerColorPin(t.tipo);
+          
+          // Crear un marcador circular personalizado con el color del trámite
+          const markerIcon = L.divIcon({
+            className: 'custom-pin',
+            html: `<div style="background-color: ${colorPin}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.6);"></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+          });
+
+          const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon }).addTo(map);
+          marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
         }
       });
     };
@@ -481,7 +515,7 @@ export default function DashboardAgrimensura() {
     } else {
       initMapWithLeaflet();
     }
-  }, [activeTab, filtroAnioDashboard, listaTrabajosParaDashboard]);
+  }, [activeTab, filtroAnioDashboard, filtroSocioDashboard, filtroTipoDashboard, listaTrabajosParaDashboard]);
 
   return (
     <div className="min-h-screen bg-[#111111] p-4 md:p-8 font-sans text-zinc-300 overflow-x-hidden">
@@ -505,23 +539,52 @@ export default function DashboardAgrimensura() {
       {/* PESTAÑA: DASHBOARD & MAPA */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800 gap-4">
+          
+          {/* BARRA DE FILTROS AVANZADOS (AÑO, SOCIO, TIPO DE TRABAJO) */}
+          <div className="bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <h2 className="text-lg md:text-xl font-black tracking-widest text-white uppercase">Panel de Estadísticas y Rendimiento</h2>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <label className="text-xs uppercase tracking-wider font-bold text-zinc-400">Filtrar Año:</label>
-              <select value={filtroAnioDashboard} onChange={e => setFiltroAnioDashboard(e.target.value)}
-                className="bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#727A4E] cursor-pointer">
-                <option value="Todos">Todo el Historial</option>
-                {anosDisponibles.map((anio: any) => (
-                  <option key={anio} value={anio}>Año {anio}</option>
-                ))}
-              </select>
+            
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Filtro Año */}
+              <div className="flex flex-col">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Año</label>
+                <select value={filtroAnioDashboard} onChange={e => setFiltroAnioDashboard(e.target.value)}
+                  className="bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#727A4E] cursor-pointer">
+                  <option value="Todos">Todos</option>
+                  {anosDisponibles.map((anio: any) => (
+                    <option key={anio} value={anio}>{anio}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro Socio */}
+              <div className="flex flex-col">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Socio</label>
+                <select value={filtroSocioDashboard} onChange={e => setFiltroSocioDashboard(e.target.value)}
+                  className="bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#727A4E] cursor-pointer">
+                  <option value="Todos">Todos</option>
+                  <option value="Leo">Leo</option>
+                  <option value="Bruno">Bruno</option>
+                </select>
+              </div>
+
+              {/* Filtro Tipo de Trabajo */}
+              <div className="flex flex-col">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Tipo de Trabajo</label>
+                <select value={filtroTipoDashboard} onChange={e => setFiltroTipoDashboard(e.target.value)}
+                  className="bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#727A4E] cursor-pointer">
+                  <option value="Todos">Todos</option>
+                  {tiposDisponibles.map((tp: any) => (
+                    <option key={tp} value={tp}>{tp}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 text-center shadow-lg">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Total Expedientes Finalizados</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Total Expedientes Filtrados</span>
               <span className="text-4xl md:text-5xl font-black text-white">{totalTrabajosDash}</span>
             </div>
             
@@ -538,12 +601,20 @@ export default function DashboardAgrimensura() {
             </div>
           </div>
 
-          {/* MAPA INTERACTIVO CON MARCADORES DE SUPABASE */}
+          {/* MAPA INTERACTIVO CON COLORES DIFERENCIADOS POR TIPO */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
               <div>
                 <h3 className="font-bold text-white tracking-widest uppercase text-sm">🗺️ Mapa de Trabajos Realizados</h3>
-                <p className="text-xs text-zinc-400">Pines sincronizados con los expedientes filtrados.</p>
+                <p className="text-xs text-zinc-400">Pines diferenciados por color según el tipo de trámite.</p>
+              </div>
+              {/* Referencia de Colores */}
+              <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase">
+                <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> VEP</span>
+                <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> REP</span>
+                <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> PH</span>
+                <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span> DIV</span>
+                <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block"></span> CCU</span>
               </div>
             </div>
             <div ref={mapContainerRef} className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#161616] relative z-0"></div>
@@ -633,7 +704,7 @@ export default function DashboardAgrimensura() {
 
           {/* DISTRIBUCIÓN POR TIPO DE TRABAJO */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Cantidad por Tipo de Trabajo</h3>
+            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Cantidad por Tipo de Trabajo (según filtros)</h3>
             {tiposOrdenadosDash.length === 0 ? (
               <p className="text-zinc-500 text-sm">No hay datos registrados aún.</p>
             ) : (
@@ -1158,7 +1229,7 @@ export default function DashboardAgrimensura() {
                                               )}
                                             </div>
 
-                                            <div className="node-table overflow-x-auto">
+                                            <div className="overflow-x-auto">
                                               <table className="w-full text-left whitespace-nowrap min-w-[700px]">
                                                 <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
                                                 <tbody>
