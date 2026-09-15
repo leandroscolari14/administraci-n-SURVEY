@@ -65,6 +65,10 @@ export default function DashboardAgrimensura() {
 
   const [filtroAnioDashboard, setFiltroAnioDashboard] = useState("Todos");
 
+  // Referencia para el mapa Leaflet
+  const mapRef = useRef<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => { cargarDatos(); }, []);
 
   useEffect(() => {
@@ -426,6 +430,59 @@ export default function DashboardAgrimensura() {
     ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null)
   ])).filter(Boolean).sort((a: any, b: any) => b.localeCompare(a));
 
+  // RENDERIZAR MAPA LEAFLET DINÁMICO CON PUNTOS
+  useEffect(() => {
+    if (activeTab !== "dashboard") return;
+
+    // Cargar Leaflet CSS si no está
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    // Cargar Leaflet JS si no está
+    const initMapWithLeaflet = () => {
+      if (!(window as any).L || !mapContainerRef.current) return;
+
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+
+      const L = (window as any).L;
+      const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12); // Santa Fe centro
+      mapRef.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      // Agregar marcadores basados en listaTrabajosParaDashboard que tengan lat y lng
+      listaTrabajosParaDashboard.forEach((t: any) => {
+        if (t.lat && t.lng) {
+          const marker = L.marker([Number(t.lat), Number(t.lng)]).addTo(map);
+          marker.bindPopup(`<b>${t.tipo || 'TRABAJO'}</b><br>${t.propietario || t.nombre_expediente}<br><small>Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
+        }
+      });
+    };
+
+    if (!(window as any).L) {
+      if (!document.getElementById("leaflet-js")) {
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.onload = initMapWithLeaflet;
+        document.body.appendChild(script);
+      }
+    } else {
+      initMapWithLeaflet();
+    }
+  }, [activeTab, filtroAnioDashboard, listaTrabajosParaDashboard]);
+
   return (
     <div className="min-h-screen bg-[#111111] p-4 md:p-8 font-sans text-zinc-300 overflow-x-hidden">
       
@@ -481,29 +538,15 @@ export default function DashboardAgrimensura() {
             </div>
           </div>
 
-          {/* MAPA INTERACTIVO DE TRABAJOS (LIBRE DE ERRORES 404) */}
+          {/* MAPA INTERACTIVO CON MARCADORES DE SUPABASE */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="font-bold text-white tracking-widest uppercase text-sm">🗺️ Mapa de Trabajos Realizados</h3>
-                <p className="text-xs text-zinc-400">Visualización geográfica de los expedientes filtrados.</p>
+                <p className="text-xs text-zinc-400">Pines sincronizados con los expedientes filtrados.</p>
               </div>
-              <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="text-xs text-[#727A4E] hover:underline font-bold uppercase tracking-wider">Abrir en Google Maps ↗</a>
             </div>
-            <div className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#161616] relative flex items-center justify-center">
-              {/* Mapa de OpenStreetMap integrado de forma limpia sin errores externos */}
-              <iframe
-                title="Mapa Interactivo Mensuras"
-                width="100%"
-                height="100%"
-                style={{ border: 0 }}
-                loading="lazy"
-                src="https://www.openstreetmap.org/export/embed.html?bbox=-60.75%2C-31.68%2C-60.65%2C-31.58&amp;layer=mapnik"
-              ></iframe>
-            </div>
-            <div className="mt-3 text-right">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Mostrando zona de cobertura: Santa Fe y alrededores</span>
-            </div>
+            <div ref={mapContainerRef} className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#161616] relative z-0"></div>
           </div>
 
           {/* LISTA EXTRAÍBLE DE EXPEDIENTES FINALIZADOS POR AÑO -> MES */}
@@ -1115,7 +1158,7 @@ export default function DashboardAgrimensura() {
                                               )}
                                             </div>
 
-                                            <div className="overflow-x-auto">
+                                            <div className="node-table overflow-x-auto">
                                               <table className="w-full text-left whitespace-nowrap min-w-[700px]">
                                                 <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
                                                 <tbody>
