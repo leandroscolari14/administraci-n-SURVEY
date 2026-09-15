@@ -219,7 +219,10 @@ export default function DashboardAgrimensura() {
     return { cobradoLeo, limpioLeoTotal: gananciaPuraLeo, gastosLeo: gastosSalientesLeo, balanceLeo: (cobradoLeo - gastosSalientesLeo) - (gananciaPuraLeo - deuda5050Leo), cobradoBruno, limpioBrunoTotal: gananciaPuraBruno, gastosBruno: gastosSalientesBruno, balanceBruno: (cobradoBruno - gastosSalientesBruno) - (gananciaPuraBruno - deuda5050Bruno) };
   };
 
+  // Se calculan los resúmenes tanto de la semana actual como del historial completo
   const resumenActual = generarResumen(finanzas);
+  const resumenHistorialTotal = generarResumen(historial);
+
   const trabajosLeo = trabajosActivos.filter((t: any) => t.encargado === "Leo");
   const trabajosBruno = trabajosActivos.filter((t: any) => t.encargado === "Bruno");
 
@@ -617,6 +620,7 @@ export default function DashboardAgrimensura() {
       {activeTab === "historial" && (
         <div className="space-y-4">
           <h2 className="text-xl md:text-2xl font-black tracking-widest text-white mb-6 uppercase border-b border-zinc-800 pb-4">Finanzas Liquidadas</h2>
+          
           {fechasOrdenadasFinanzas.map(fechaKey => {
             const trabajosDelBloque = historialAgrupado[fechaKey];
             const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
@@ -672,6 +676,21 @@ export default function DashboardAgrimensura() {
               </div>
             );
           })}
+
+          {/* TOTAL HISTÓRICO AL FINAL */}
+          {historial.length > 0 && (
+            <div className="mt-12 bg-[#1A1A1A] border-t-4 border-[#727A4E] rounded-b-xl shadow-2xl p-6 md:p-8 flex flex-col md:flex-row justify-around items-center gap-6">
+              <div className="text-center w-full md:w-1/2 border-b md:border-b-0 md:border-r border-zinc-800 pb-6 md:pb-0 md:pr-6">
+                <h4 className="text-zinc-500 font-black tracking-widest text-xs mb-2">GANANCIA TOTAL LEO (HISTÓRICA)</h4>
+                <p className="text-3xl md:text-4xl font-black text-white">${formatearPlata(resumenHistorialTotal.limpioLeoTotal)}</p>
+              </div>
+              <div className="text-center w-full md:w-1/2 pt-2 md:pt-0 md:pl-6">
+                <h4 className="text-zinc-500 font-black tracking-widest text-xs mb-2">GANANCIA TOTAL BRUNO (HISTÓRICA)</h4>
+                <p className="text-3xl md:text-4xl font-black text-white">${formatearPlata(resumenHistorialTotal.limpioBrunoTotal)}</p>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
     </div>
