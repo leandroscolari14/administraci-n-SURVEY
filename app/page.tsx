@@ -17,6 +17,7 @@ export default function DashboardAgrimensura() {
   const [leoAbierto, setLeoAbierto] = useState(false);
   const [brunoAbierto, setBrunoAbierto] = useState(false);
   const [aniosAbiertos, setAniosAbiertos] = useState<Record<string, boolean>>({});
+  const [mesesAbiertos, setMesesAbiertos] = useState<Record<string, boolean>>({});
   
   const [trabajosActivos, setTrabajosActivos] = useState<any[]>([]);
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
@@ -28,7 +29,6 @@ export default function DashboardAgrimensura() {
   const [tiempoUso, setTiempoUso] = useState("");
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   
-  // Estado para el comprobante al cerrar semana
   const [archivoComprobante, setArchivoComprobante] = useState<File | null>(null);
 
   const tipoInputRef = useRef<HTMLInputElement>(null);
@@ -44,8 +44,8 @@ export default function DashboardAgrimensura() {
   const [nuevaMedicion, setNuevaMedicion] = useState({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "" });
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
+  const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroTexto, setFiltroTexto] = useState("");
-  const [filtroMes, setFiltroMes] = useState("");
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -84,22 +84,17 @@ export default function DashboardAgrimensura() {
 
   const enviarTelegram = async (mensaje: string, fotoUrl?: string) => {
     if (!telegramBotToken || !telegramChatId) return;
-    
     if (fotoUrl) {
-      // Si hay comprobante, mandamos la foto con el texto abajo
-      const urlFoto = `https://api.telegram.org/bot${telegramBotToken}/sendPhoto`;
       try {
-        await fetch(urlFoto, {
+        await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendPhoto`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chat_id: telegramChatId, photo: fotoUrl, caption: mensaje, parse_mode: "Markdown" })
         });
       } catch (error) { console.error(error); }
     } else {
-      // Mensaje de texto normal
-      const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
       try {
-        await fetch(url, {
+        await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chat_id: telegramChatId, text: mensaje, parse_mode: "Markdown" })
@@ -230,60 +225,32 @@ export default function DashboardAgrimensura() {
   const iniciarEdicionFinanza = (f: any) => { setEditandoFinanzaId(f.id); setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false }); };
   const eliminarFinanza = async (id: string) => { if (confirm("¿Borrar registro?")) { await supabase.from("finanzas").delete().eq("id", id); cargarDatos(); } };
   
-  // LIQUIDAR SEMANA CON COMPROBANTE OPCIONAL
   const liquidarSemana = async () => {
     if (finanzas.length === 0) return alert("Nada para liquidar.");
     if (!confirm("¿Estás seguro de cerrar y liquidar esta semana?")) return;
 
     let urlComprobanteFinal = null;
-
-    // Si adjuntó un archivo, lo subimos a Supabase Storage
     if (archivoComprobante) {
       const nombreArchivo = `${Date.now()}_${archivoComprobante.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("comprobantes")
-        .upload(nombreArchivo, archivoComprobante);
-
-      if (uploadError) {
-        alert(`Error al subir el comprobante: ${uploadError.message}`);
-        return;
-      }
-
-      // Obtenemos la URL pública del archivo subido
-      const { data: publicUrlData } = supabase.storage
-        .from("comprobantes")
-        .getPublicUrl(nombreArchivo);
-
+      const { data: uploadData, error: uploadError } = await supabase.storage.from("comprobantes").upload(nombreArchivo, archivoComprobante);
+      if (uploadError) { alert(`Error al subir el comprobante: ${uploadError.message}`); return; }
+      const { data: publicUrlData } = supabase.storage.from("comprobantes").getPublicUrl(nombreArchivo);
       urlComprobanteFinal = publicUrlData.publicUrl;
     }
 
     const fechaLiquidacionActual = new Date().toISOString();
     const ids = finanzas.map((f: any) => f.id);
-    
-    const { error } = await supabase.from("finanzas")
-      .update({ 
-        liquidado: true, 
-        fecha_liquidacion: fechaLiquidacionActual,
-        comprobante_url: urlComprobanteFinal 
-      })
-      .in("id", ids);
+    const { error } = await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: fechaLiquidacionActual, comprobante_url: urlComprobanteFinal }).in("id", ids);
 
-    if (error) {
-      alert(`Error al liquidar: ${error.message}`);
-      return;
-    }
+    if (error) { alert(`Error al liquidar: ${error.message}`); return; }
 
-    // Armamos el mensaje para Telegram
     const resumen = generarResumen(finanzas);
     let msg = `💰 *CIERRE DE SEMANA LIQUIDADO*\n\n`;
     msg += `• *Leo Limpio:* $${formatearPlata(resumen.limpioLeoTotal)} (${resumen.balanceLeo > 0 ? `Transfirió $${formatearPlata(resumen.balanceLeo)}` : `Recibió $${formatearPlata(Math.abs(resumen.balanceLeo))}`})\n`;
     msg += `• *Bruno Limpio:* $${formatearPlata(resumen.limpioBrunoTotal)} (${resumen.balanceBruno > 0 ? `Transfirió $${formatearPlata(resumen.balanceBruno)}` : `Recibió $${formatearPlata(Math.abs(resumen.balanceBruno))}`})\n`;
-    if (urlComprobanteFinal) {
-      msg += `\n📎 *Comprobante de transferencia adjunto.*`;
-    }
+    if (urlComprobanteFinal) { msg += `\n📎 *Comprobante de transferencia adjunto.*`; }
 
     await enviarTelegram(msg, urlComprobanteFinal || undefined);
-
     setArchivoComprobante(null);
     cargarDatos();
     alert("¡Semana liquidada y respaldada con éxito!");
@@ -312,23 +279,33 @@ export default function DashboardAgrimensura() {
   const trabajosLeo = trabajosActivos.filter((t: any) => t.encargado === "Leo");
   const trabajosBruno = trabajosActivos.filter((t: any) => t.encargado === "Bruno");
 
+  // FILTROS PARA EL HISTORIAL DE FINALIZADOS
   const trabajosFiltrados = trabajosFinalizados.filter((t: any) => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
+    const coincideTipo = filtroTipo === "" || (t.tipo && t.tipo.toLowerCase().includes(filtroTipo.toLowerCase()));
     const searchStr = `${t.tipo || ''} ${t.propietario || ''} ${t.nombre_expediente || ''}`.toLowerCase();
     const coincideTexto = searchStr.includes(filtroTexto.toLowerCase());
-    const coincideMes = filtroMes === "" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroMes));
-    return coincideEncargado && coincideTexto && coincideMes;
+    return coincideEncargado && coincideTipo && coincideTexto;
   });
 
-  const trabajosPorAnio = trabajosFiltrados.reduce((acc: any, t: any) => {
+  // AGRUPAMIENTO ANIO -> MES PARA EL ACORDEÓN
+  const trabajosPorAnioYMes = trabajosFiltrados.reduce((acc: any, t: any) => {
     const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
-    if (!acc[anio]) acc[anio] = [];
-    acc[anio].push(t);
+    const mesNum = t.fecha_finalizacion ? t.fecha_finalizacion.substring(5, 7) : "00";
+    if (!acc[anio]) acc[anio] = {};
+    if (!acc[anio][mesNum]) acc[anio][mesNum] = [];
+    acc[anio][mesNum].push(t);
     return acc;
-  }, {} as Record<string, any[]>);
-  
-  const aniosOrdenados = Object.keys(trabajosPorAnio).sort((a, b) => b.localeCompare(a));
+  }, {});
+
+  const aniosOrdenados = Object.keys(trabajosPorAnioYMes).sort((a, b) => b.localeCompare(a));
   const toggleAnio = (anio: string) => setAniosAbiertos({ ...aniosAbiertos, [anio]: !aniosAbiertos[anio] });
+  const toggleMes = (key: string) => setMesesAbiertos({ ...mesesAbiertos, [key]: !mesesAbiertos[key] });
+
+  const nombresMeses: Record<string, string> = {
+    "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril", "05": "Mayo", "06": "Junio",
+    "07": "Julio", "08": "Agosto", "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre", "00": "Sin Fecha"
+  };
 
   const historialAgrupado = historial.reduce((acc: any, item: any) => { const key = item.fecha_liquidacion || "anterior"; if (!acc[key]) acc[key] = []; acc[key].push(item); return acc; }, {});
   const fechasOrdenadasFinanzas = Object.keys(historialAgrupado).sort((a, b) => { if (a === "anterior") return 1; if (b === "anterior") return -1; return new Date(b).getTime() - new Date(a).getTime(); });
@@ -353,6 +330,19 @@ export default function DashboardAgrimensura() {
     );
   };
 
+  // DATOS PARA EL DASHBOARD DE ESTADÍSTICAS
+  const totalTrabajosFinalizados = trabajosFinalizados.length;
+  const cantLeo = trabajosFinalizados.filter((t: any) => t.encargado === "Leo").length;
+  const cantBruno = trabajosFinalizados.filter((t: any) => t.encargado === "Bruno").length;
+  
+  // Conteo por tipo de trabajo en el historial
+  const tiposConteo = trabajosFinalizados.reduce((acc: any, t: any) => {
+    const tp = (t.tipo || "Otro").trim().toUpperCase();
+    acc[tp] = (acc[tp] || 0) + 1;
+    return acc;
+  }, {});
+  const tiposOrdenados = Object.entries(tiposConteo).sort((a: any, b: any) => b[1] - a[1]);
+
   return (
     <div className="min-h-screen bg-[#111111] p-4 md:p-8 font-sans text-zinc-300 overflow-x-hidden">
       
@@ -364,12 +354,53 @@ export default function DashboardAgrimensura() {
         </div>
         <div className="flex flex-wrap justify-center lg:justify-end gap-2 w-full lg:w-auto">
           <button onClick={() => setActiveTab("trabajos")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "trabajos" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Expedientes</button>
+          <button onClick={() => setActiveTab("dashboard")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "dashboard" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📊 Dashboard</button>
           <button onClick={() => setActiveTab("mediciones")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "mediciones" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📏 Mediciones</button>
           <button onClick={() => setActiveTab("finanzas")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "finanzas" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Finanzas</button>
           <button onClick={() => setActiveTab("historial")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "historial" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Historial</button>
           <button onClick={() => setActiveTab("catastro")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 ${activeTab === "catastro" ? "bg-white text-[#1A1A1A] shadow-md" : "bg-[#222222] text-[#727A4E] hover:bg-[#333] border border-[#727A4E]/30"}`}>🔑 SCIT</button>
         </div>
       </header>
+
+      {/* PESTAÑA: DASHBOARD DE ESTADÍSTICAS */}
+      {activeTab === "dashboard" && (
+        <div className="space-y-6">
+          <h2 className="text-xl md:text-2xl font-black tracking-widest text-white uppercase border-b border-zinc-800 pb-4">Panel de Estadísticas y Rendimiento</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 text-center shadow-lg">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Total Expedientes Finalizados</span>
+              <span className="text-4xl md:text-5xl font-black text-white">{totalTrabajosFinalizados}</span>
+            </div>
+            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 text-center shadow-lg">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Cerrados por Leo</span>
+              <span className="text-4xl md:text-5xl font-black text-[#A4B070]">{cantLeo}</span>
+              <span className="text-xs text-zinc-500 block mt-1">{totalTrabajosFinalizados > 0 ? Math.round((cantLeo / totalTrabajosFinalizados) * 100) : 0}% del total</span>
+            </div>
+            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 text-center shadow-lg">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-2">Cerrados por Bruno</span>
+              <span className="text-4xl md:text-5xl font-black text-[#A4B070]">{cantBruno}</span>
+              <span className="text-xs text-zinc-500 block mt-1">{totalTrabajosFinalizados > 0 ? Math.round((cantBruno / totalTrabajosFinalizados) * 100) : 0}% del total</span>
+            </div>
+          </div>
+
+          <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
+            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Cantidad por Tipo de Trabajo (Historial)</h3>
+            {tiposOrdenados.length === 0 ? (
+              <p className="text-zinc-500 text-sm">No hay datos registrados aún.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {tiposOrdenados.map(([tipo, cantidad]: any) => (
+                  <div key={tipo} className="bg-[#222] p-4 rounded-lg border border-zinc-800 text-center">
+                    <span className="text-xs text-[#727A4E] font-bold block truncate">{tipo}</span>
+                    <span className="text-2xl font-black text-white mt-1 block">{cantidad}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* PESTAÑA: TRABAJOS EN CURSO E HISTORIAL */}
       {activeTab === "trabajos" && (
@@ -398,7 +429,7 @@ export default function DashboardAgrimensura() {
 
               <div className="space-y-6">
                 
-                {/* EXPEDIENTES LEO - CONTRAÍBLE CON SCROLL HORIZONTAL */}
+                {/* EXPEDIENTES LEO */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
                     <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo</h3>
@@ -431,7 +462,7 @@ export default function DashboardAgrimensura() {
                   )}
                 </div>
 
-                {/* EXPEDIENTES BRUNO - CONTRAÍBLE CON SCROLL HORIZONTAL */}
+                {/* EXPEDIENTES BRUNO */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
                     <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno</h3>
@@ -472,17 +503,17 @@ export default function DashboardAgrimensura() {
             <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800 p-4 md:p-6">
               <div className="flex flex-col xl:flex-row justify-between items-start gap-4 mb-6">
                 <div className="w-full">
-                  <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Historial Histórico</h3>
+                  <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Historial de Finalizados</h3>
                   <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full">
                     <div className="flex-1 sm:flex-none">
-                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Buscar</label>
+                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Buscar Propietario</label>
                       <input type="text" placeholder="Ej: Juan Perez..." value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)}
                         className="w-full border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm"/>
                     </div>
                     <div className="flex-1 sm:flex-none">
-                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Mes/Año</label>
-                      <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
-                        className="w-full border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm cursor-pointer"/>
+                      <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Filtrar por Tipo</label>
+                      <input type="text" placeholder="Ej: VEP, PH, M..." value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
+                        className="w-full border-b-2 border-zinc-700 bg-[#1A1A1A] text-white p-2 rounded focus:outline-none focus:border-[#727A4E] text-sm"/>
                     </div>
                     <div className="flex-1 sm:flex-none">
                       <label className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Encargado</label>
@@ -504,43 +535,69 @@ export default function DashboardAgrimensura() {
                 <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#222] rounded-lg">No se encontraron expedientes</p>
               ) : (
                 <div className="space-y-4">
-                  {aniosOrdenados.map(anio => (
-                    <div key={anio} className="bg-[#111111] rounded-lg overflow-hidden border border-zinc-800">
-                      <div onClick={() => toggleAnio(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                        <h4 className="font-bold text-white uppercase tracking-widest text-sm flex items-center gap-2">
-                          <span className="text-[#727A4E] text-xs">{aniosAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
-                        </h4>
-                        <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosPorAnio[anio].length} Exp.</span>
-                      </div>
-                      
-                      {aniosAbiertos[anio] && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left whitespace-nowrap min-w-[500px]">
-                            <thead>
-                              <tr className="bg-[#1A1A1A] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800">
-                                <th className="p-4 w-24">Tipo</th>
-                                <th className="p-4">Propietario</th>
-                                <th className="p-4">Encomienda</th>
-                                <th className="p-4">Fecha Finalización</th>
-                                <th className="p-4 w-16 text-center">Acción</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {trabajosPorAnio[anio].map((t: any) => (
-                                <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
-                                  <td className="p-4 font-black text-[#A4B070]">{t.tipo || '-'}</td>
-                                  <td className="p-4"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
-                                  <td className="p-4 text-zinc-400 font-bold">{t.encargado}</td>
-                                  <td className="p-4 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
-                                  <td className="p-4 text-center"><button onClick={() => eliminarTrabajo(t.id)} title="Eliminar definitivamente" className="text-lg opacity-30 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button></td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                  {aniosOrdenados.map(anio => {
+                    const mesesDelAnio = Object.keys(trabajosPorAnioYMes[anio]).sort((a, b) => b.localeCompare(a));
+                    return (
+                      <div key={anio} className="bg-[#111111] rounded-lg overflow-hidden border border-zinc-800">
+                        <div onClick={() => toggleAnio(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                          <h4 className="font-bold text-white uppercase tracking-widest text-sm flex items-center gap-2">
+                            <span className="text-[#727A4E] text-xs">{aniosAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                          </h4>
+                          <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
+                            {Object.values(trabajosPorAnioYMes[anio]).flat().length} Exp.
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        
+                        {aniosAbiertos[anio] && (
+                          <div className="p-3 space-y-3">
+                            {mesesDelAnio.map(mesNum => {
+                              const keyMes = `${anio}-${mesNum}`;
+                              const listaMes = trabajosPorAnioYMes[anio][mesNum];
+                              const nombreMes = nombresMeses[mesNum] || mesNum;
+
+                              return (
+                                <div key={keyMes} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
+                                  <div onClick={() => toggleMes(keyMes)} className="p-3 bg-[#1D1D1D] flex justify-between cursor-pointer hover:bg-[#252525] select-none">
+                                    <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                                      <span className="text-[#727A4E] text-[10px]">{mesesAbiertos[keyMes] ? '▼' : '▶'}</span> {nombreMes}
+                                    </span>
+                                    <span className="text-xs text-zinc-500 font-bold">{listaMes.length} Exp.</span>
+                                  </div>
+
+                                  {mesesAbiertos[keyMes] && (
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left whitespace-nowrap min-w-[500px]">
+                                        <thead>
+                                          <tr className="bg-[#1A1A1A] text-[#727A4E] font-bold uppercase text-[10px] tracking-wider border-b border-zinc-800">
+                                            <th className="p-3 w-24">Tipo</th>
+                                            <th className="p-3">Propietario</th>
+                                            <th className="p-3">Encomienda</th>
+                                            <th className="p-3">Fecha Finalización</th>
+                                            <th className="p-3 w-12 text-center">Acción</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {listaMes.map((t: any) => (
+                                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] text-xs">
+                                              <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
+                                              <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
+                                              <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
+                                              <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
+                                              <td className="p-3 text-center"><button onClick={() => eliminarTrabajo(t.id)} title="Eliminar definitivamente" className="text-sm opacity-30 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button></td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -649,7 +706,6 @@ export default function DashboardAgrimensura() {
             </form>
           </div>
 
-          {/* PANEL DE CIERRE DE SEMANA CON ADJUNTO DE COMPROBANTE */}
           <div className="bg-[#222222] border border-[#727A4E]/30 rounded-xl shadow-2xl p-6 md:p-8 flex flex-col xl:flex-row items-center justify-between relative overflow-hidden gap-8">
             <div className="flex flex-col sm:flex-row gap-8 lg:gap-16 relative z-10 w-full xl:w-auto justify-around xl:justify-start">
               <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
@@ -720,8 +776,6 @@ export default function DashboardAgrimensura() {
             const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
             const estaAbierto = semanasAbiertas[fechaKey] || false;
             const resumenBloque = generarResumen(trabajosDelBloque);
-            
-            // Buscamos si la semana tiene comprobante guardado en alguno de sus registros
             const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
 
             return (
@@ -740,7 +794,6 @@ export default function DashboardAgrimensura() {
                 
                 {estaAbierto && (
                   <div>
-                    {/* PANEL DE RESUMEN INDIVIDUAL DE CADA SEMANA CERRADA */}
                     <div className="bg-[#1A1A1A] p-4 md:p-6 border-b border-zinc-800 flex flex-col lg:flex-row gap-6 justify-between items-center">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full lg:w-auto flex-1">
                         <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
@@ -759,7 +812,6 @@ export default function DashboardAgrimensura() {
                         </div>
                       </div>
 
-                      {/* BOTÓN PARA VER EL COMPROBANTE ADJUNTO */}
                       {comprobanteUrl && (
                         <div className="flex flex-col items-center justify-center bg-[#222] p-4 rounded-xl border border-zinc-800 w-full lg:w-48">
                           <span className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider">Comprobante</span>
@@ -779,7 +831,7 @@ export default function DashboardAgrimensura() {
                             return (
                               <tr key={h.id} className={`border-b border-zinc-800 ${h.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
                                 <td className="p-4 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded">50/50</span>}</td>
-                                <td className="p-4 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
+                                <td className="p-4 text-zinc-400">{h.es_gusto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                 <td className="p-4 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
                                 <td className={`p-4 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                 <td className="p-4 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
