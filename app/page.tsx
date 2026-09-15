@@ -27,6 +27,10 @@ export default function DashboardAgrimensura() {
   const [catastro, setCatastro] = useState({ usuario: "Libre", fecha: "" });
   const [tiempoUso, setTiempoUso] = useState("");
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
+  
+  // Estado para el comprobante al cerrar semana
+  const [archivoComprobante, setArchivoComprobante] = useState<File | null>(null);
+
   const tipoInputRef = useRef<HTMLInputElement>(null);
   const notasInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,10 +82,30 @@ export default function DashboardAgrimensura() {
     if (dataMediciones) setMediciones(dataMediciones);
   };
 
-  const enviarTelegram = async (mensaje: string) => {
+  const enviarTelegram = async (mensaje: string, fotoUrl?: string) => {
     if (!telegramBotToken || !telegramChatId) return;
-    const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
-    try { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: telegramChatId, text: mensaje, parse_mode: "Markdown" }) }); } catch (error) { console.error(error); }
+    
+    if (fotoUrl) {
+      // Si hay comprobante, mandamos la foto con el texto abajo
+      const urlFoto = `https://api.telegram.org/bot${telegramBotToken}/sendPhoto`;
+      try {
+        await fetch(urlFoto, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: telegramChatId, photo: fotoUrl, caption: mensaje, parse_mode: "Markdown" })
+        });
+      } catch (error) { console.error(error); }
+    } else {
+      // Mensaje de texto normal
+      const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
+      try {
+        await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: telegramChatId, text: mensaje, parse_mode: "Markdown" })
+        });
+      } catch (error) { console.error(error); }
+    }
   };
 
   const tomarCatastro = async (nombre: string) => {
@@ -205,7 +229,66 @@ export default function DashboardAgrimensura() {
   };
   const iniciarEdicionFinanza = (f: any) => { setEditandoFinanzaId(f.id); setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false }); };
   const eliminarFinanza = async (id: string) => { if (confirm("¿Borrar registro?")) { await supabase.from("finanzas").delete().eq("id", id); cargarDatos(); } };
-  const liquidarSemana = async () => { if (finanzas.length === 0) return alert("Nada para liquidar."); if (confirm("¿Liquidar semana?")) { const ids = finanzas.map((f: any) => f.id); await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: new Date().toISOString() }).in("id", ids); cargarDatos(); } };
+  
+  // LIQUIDAR SEMANA CON COMPROBANTE OPCIONAL
+  const liquidarSemana = async () => {
+    if (finanzas.length === 0) return alert("Nada para liquidar.");
+    if (!confirm("¿Estás seguro de cerrar y liquidar esta semana?")) return;
+
+    let urlComprobanteFinal = null;
+
+    // Si adjuntó un archivo, lo subimos a Supabase Storage
+    if (archivoComprobante) {
+      const nombreArchivo = `${Date.now()}_${archivoComprobante.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("comprobantes")
+        .upload(nombreArchivo, archivoComprobante);
+
+      if (uploadError) {
+        alert(`Error al subir el comprobante: ${uploadError.message}`);
+        return;
+      }
+
+      // Obtenemos la URL pública del archivo subido
+      const { data: publicUrlData } = supabase.storage
+        .from("comprobantes")
+        .getPublicUrl(nombreArchivo);
+
+      urlComprobanteFinal = publicUrlData.publicUrl;
+    }
+
+    const fechaLiquidacionActual = new Date().toISOString();
+    const ids = finanzas.map((f: any) => f.id);
+    
+    const { error } = await supabase.from("finanzas")
+      .update({ 
+        liquidado: true, 
+        fecha_liquidacion: fechaLiquidacionActual,
+        comprobante_url: urlComprobanteFinal 
+      })
+      .in("id", ids);
+
+    if (error) {
+      alert(`Error al liquidar: ${error.message}`);
+      return;
+    }
+
+    // Armamos el mensaje para Telegram
+    const resumen = generarResumen(finanzas);
+    let msg = `💰 *CIERRE DE SEMANA LIQUIDADO*\n\n`;
+    msg += `• *Leo Limpio:* $${formatearPlata(resumen.limpioLeoTotal)} (${resumen.balanceLeo > 0 ? `Transfirió $${formatearPlata(resumen.balanceLeo)}` : `Recibió $${formatearPlata(Math.abs(resumen.balanceLeo))}`})\n`;
+    msg += `• *Bruno Limpio:* $${formatearPlata(resumen.limpioBrunoTotal)} (${resumen.balanceBruno > 0 ? `Transfirió $${formatearPlata(resumen.balanceBruno)}` : `Recibió $${formatearPlata(Math.abs(resumen.balanceBruno))}`})\n`;
+    if (urlComprobanteFinal) {
+      msg += `\n📎 *Comprobante de transferencia adjunto.*`;
+    }
+
+    await enviarTelegram(msg, urlComprobanteFinal || undefined);
+
+    setArchivoComprobante(null);
+    cargarDatos();
+    alert("¡Semana liquidada y respaldada con éxito!");
+  };
+
   const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setActiveTab("finanzas"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
@@ -566,6 +649,7 @@ export default function DashboardAgrimensura() {
             </form>
           </div>
 
+          {/* PANEL DE CIERRE DE SEMANA CON ADJUNTO DE COMPROBANTE */}
           <div className="bg-[#222222] border border-[#727A4E]/30 rounded-xl shadow-2xl p-6 md:p-8 flex flex-col xl:flex-row items-center justify-between relative overflow-hidden gap-8">
             <div className="flex flex-col sm:flex-row gap-8 lg:gap-16 relative z-10 w-full xl:w-auto justify-around xl:justify-start">
               <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
@@ -587,7 +671,14 @@ export default function DashboardAgrimensura() {
                 </p>
               </div>
             </div>
-            <button onClick={liquidarSemana} className="w-full xl:w-auto bg-[#727A4E] text-white hover:bg-[#8B9461] px-8 py-4 rounded font-black text-sm uppercase tracking-widest shadow-lg relative z-10 border border-[#8B9461]">CERRAR SEMANA</button>
+
+            <div className="flex flex-col gap-3 w-full xl:w-auto items-center relative z-10">
+              <div className="w-full bg-[#1A1A1A] p-3 rounded-lg border border-zinc-800 text-center">
+                <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-1">📎 Adjuntar Comprobante (Opcional)</label>
+                <input type="file" accept="image/*,application/pdf" onChange={e => setArchivoComprobante(e.target.files?.[0] || null)} className="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#727A4E] file:text-white hover:file:bg-[#8B9461] cursor-pointer w-full"/>
+              </div>
+              <button onClick={liquidarSemana} className="w-full bg-[#727A4E] text-white hover:bg-[#8B9461] px-8 py-4 rounded font-black text-sm uppercase tracking-widest shadow-lg border border-[#8B9461]">CERRAR SEMANA</button>
+            </div>
           </div>
 
           <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
@@ -629,12 +720,17 @@ export default function DashboardAgrimensura() {
             const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
             const estaAbierto = semanasAbiertas[fechaKey] || false;
             const resumenBloque = generarResumen(trabajosDelBloque);
+            
+            // Buscamos si la semana tiene comprobante guardado en alguno de sus registros
+            const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
 
             return (
               <div key={fechaKey} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                 <div className="bg-[#222222] p-4 md:p-5 border-b-2 border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-4 md:gap-0">
                   <h3 onClick={() => toggleHistorial(fechaKey)} className="font-bold text-sm md:text-lg cursor-pointer flex-1 tracking-widest uppercase flex items-center gap-2 md:gap-3 hover:text-[#727A4E] w-full">
-                    {tituloBloque} <span className="text-zinc-400 text-[10px] md:text-xs font-bold px-2 py-1 bg-[#1A1A1A] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
+                    {tituloBloque} 
+                    {comprobanteUrl && <span className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[10px] px-2 py-0.5 rounded font-bold">📎 Con Comprobante</span>}
+                    <span className="text-zinc-400 text-[10px] md:text-xs font-bold px-2 py-1 bg-[#1A1A1A] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
                   </h3>
                   <div className="flex gap-2 md:gap-3 w-full md:w-auto justify-end">
                     <button onClick={() => reabrirSemana(fechaKey)} className="flex-1 md:flex-none bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1.5 md:px-4 md:py-1.5 text-[10px] md:text-xs tracking-wider font-bold rounded uppercase text-center">Reabrir</button>
@@ -645,21 +741,33 @@ export default function DashboardAgrimensura() {
                 {estaAbierto && (
                   <div>
                     {/* PANEL DE RESUMEN INDIVIDUAL DE CADA SEMANA CERRADA */}
-                    <div className="bg-[#1A1A1A] p-4 md:p-6 border-b border-zinc-800 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
-                        <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO LEO (SEMANA)</span>
-                        <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
-                        <p className={`text-base font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                          {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
-                        </p>
+                    <div className="bg-[#1A1A1A] p-4 md:p-6 border-b border-zinc-800 flex flex-col lg:flex-row gap-6 justify-between items-center">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full lg:w-auto flex-1">
+                        <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
+                          <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO LEO (SEMANA)</span>
+                          <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
+                          <p className={`text-base font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                            {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
+                          </p>
+                        </div>
+                        <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
+                          <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO BRUNO (SEMANA)</span>
+                          <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
+                          <p className={`text-base font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                            {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
+                          </p>
+                        </div>
                       </div>
-                      <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
-                        <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO BRUNO (SEMANA)</span>
-                        <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
-                        <p className={`text-base font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                          {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
-                        </p>
-                      </div>
+
+                      {/* BOTÓN PARA VER EL COMPROBANTE ADJUNTO */}
+                      {comprobanteUrl && (
+                        <div className="flex flex-col items-center justify-center bg-[#222] p-4 rounded-xl border border-zinc-800 w-full lg:w-48">
+                          <span className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider">Comprobante</span>
+                          <a href={comprobanteUrl} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-4 py-2 rounded text-xs tracking-wider font-bold uppercase text-center w-full">
+                            🔍 Ver Imagen
+                          </a>
+                        </div>
+                      )}
                     </div>
 
                     <div className="overflow-x-auto">
