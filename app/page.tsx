@@ -43,6 +43,9 @@ export default function DashboardAgrimensura() {
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   
+  // Modal o estado para editar expedientes finalizados rápidamente
+  const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
+  
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
   const [nuevaFinanza, setNuevaFinanza] = useState({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });
 
@@ -63,12 +66,10 @@ export default function DashboardAgrimensura() {
   const [filtroTipo, setFiltroTipo] = useState("");
   const [filtroTexto, setFiltroTexto] = useState("");
 
-  // Nuevos Filtros para el Dashboard y Mapa
   const [filtroAnioDashboard, setFiltroAnioDashboard] = useState("Todos");
   const [filtroSocioDashboard, setFiltroSocioDashboard] = useState("Todos");
   const [filtroTipoDashboard, setFiltroTipoDashboard] = useState("Todos");
 
-  // Referencia para el mapa Leaflet
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -195,6 +196,26 @@ export default function DashboardAgrimensura() {
       notasInputRef.current?.focus();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
+  };
+
+  const guardarEdicionRapidaDash = async (e: any) => {
+    e.preventDefault();
+    if (!trabajoEditandoDash) return;
+    
+    const { error } = await supabase.from("trabajos_curso").update({
+      tipo: trabajoEditandoDash.tipo,
+      propietario: trabajoEditandoDash.propietario,
+      nombre_expediente: `${trabajoEditandoDash.tipo} - ${trabajoEditandoDash.propietario}`,
+      encargado: trabajoEditandoDash.encargado,
+      fecha_finalizacion: trabajoEditandoDash.fecha_finalizacion
+    }).eq("id", trabajoEditandoDash.id);
+
+    if (error) {
+      alert(`Error al actualizar: ${error.message}`);
+    } else {
+      setTrabajoEditandoDash(null);
+      cargarDatos();
+    }
   };
 
   const toggleEtapa = async (id: string, etapa: string, valorActual: boolean) => {
@@ -400,9 +421,7 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  // ----------------------------------------------------
   // FILTROS AVANZADOS PARA EL DASHBOARD Y MAPA
-  // ----------------------------------------------------
   const listaTrabajosParaDashboard = trabajosFinalizados.filter((t: any) => {
     const coincideAnio = filtroAnioDashboard === "Todos" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
     const coincideSocio = filtroSocioDashboard === "Todos" || t.encargado === filtroSocioDashboard;
@@ -442,21 +461,19 @@ export default function DashboardAgrimensura() {
     ...trabajosFinalizados.map((t: any) => t.tipo ? t.tipo.trim().toUpperCase() : null)
   ])).filter(Boolean).sort();
 
-  // Función para asignar colores personalizados según el Tipo de Trabajo
   const obtenerColorPin = (tipo: string) => {
     const tp = (tipo || "").trim().toUpperCase();
-    if (tp.includes("VEP")) return "#3b82f6"; // Azul
-    if (tp.includes("REP")) return "#10b981"; // Verde esmeralda
-    if (tp.includes("PH")) return "#f59e0b";  // Naranja
-    if (tp.includes("DIV")) return "#8b5cf6"; // Violeta
-    if (tp.includes("CCU")) return "#ec4899"; // Rosa
-    if (tp.includes("CL")) return "#14b8a6";  // Turquesa
-    if (tp.includes("SIMPLE")) return "#64748b"; // Gris
-    if (tp.includes("EXPROPIACION")) return "#ef4444"; // Rojo
-    return "#eab308"; // Amarillo por defecto
+    if (tp.includes("VEP")) return "#3b82f6";
+    if (tp.includes("REP")) return "#10b981";
+    if (tp.includes("PH")) return "#f59e0b";
+    if (tp.includes("DIV")) return "#8b5cf6";
+    if (tp.includes("CCU")) return "#ec4899";
+    if (tp.includes("CL")) return "#14b8a6";
+    if (tp.includes("SIMPLE")) return "#64748b";
+    if (tp.includes("EXPROPIACION")) return "#ef4444";
+    return "#eab308";
   };
 
-  // RENDERIZAR MAPA LEAFLET DINÁMICO CON PINES DE COLORES SEGÚN TIPO
   useEffect(() => {
     if (activeTab !== "dashboard") return;
 
@@ -485,12 +502,9 @@ export default function DashboardAgrimensura() {
         attribution: '&copy; OpenStreetMap'
       }).addTo(map);
 
-      // Agregar marcadores con círculos de colores según tipo de trabajo
       listaTrabajosParaDashboard.forEach((t: any) => {
         if (t.lat && t.lng) {
           const colorPin = obtenerColorPin(t.tipo);
-          
-          // Crear un marcador circular personalizado con el color del trámite
           const markerIcon = L.divIcon({
             className: 'custom-pin',
             html: `<div style="background-color: ${colorPin}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.6);"></div>`,
@@ -540,12 +554,10 @@ export default function DashboardAgrimensura() {
       {activeTab === "dashboard" && (
         <div className="space-y-6">
           
-          {/* BARRA DE FILTROS AVANZADOS (AÑO, SOCIO, TIPO DE TRABAJO) */}
           <div className="bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <h2 className="text-lg md:text-xl font-black tracking-widest text-white uppercase">Panel de Estadísticas y Rendimiento</h2>
             
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              {/* Filtro Año */}
               <div className="flex flex-col">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Año</label>
                 <select value={filtroAnioDashboard} onChange={e => setFiltroAnioDashboard(e.target.value)}
@@ -557,7 +569,6 @@ export default function DashboardAgrimensura() {
                 </select>
               </div>
 
-              {/* Filtro Socio */}
               <div className="flex flex-col">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Socio</label>
                 <select value={filtroSocioDashboard} onChange={e => setFiltroSocioDashboard(e.target.value)}
@@ -568,7 +579,6 @@ export default function DashboardAgrimensura() {
                 </select>
               </div>
 
-              {/* Filtro Tipo de Trabajo */}
               <div className="flex flex-col">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Tipo de Trabajo</label>
                 <select value={filtroTipoDashboard} onChange={e => setFiltroTipoDashboard(e.target.value)}
@@ -601,14 +611,12 @@ export default function DashboardAgrimensura() {
             </div>
           </div>
 
-          {/* MAPA INTERACTIVO CON COLORES DIFERENCIADOS POR TIPO */}
           <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
               <div>
                 <h3 className="font-bold text-white tracking-widest uppercase text-sm">🗺️ Mapa de Trabajos Realizados</h3>
                 <p className="text-xs text-zinc-400">Pines diferenciados por color según el tipo de trámite.</p>
               </div>
-              {/* Referencia de Colores */}
               <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase">
                 <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> VEP</span>
                 <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> REP</span>
@@ -620,7 +628,7 @@ export default function DashboardAgrimensura() {
             <div ref={mapContainerRef} className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#161616] relative z-0"></div>
           </div>
 
-          {/* LISTA EXTRAÍBLE DE EXPEDIENTES FINALIZADOS POR AÑO -> MES */}
+          {/* LISTA DE EXPEDIENTES CON BOTÓN DE EDITAR */}
           <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800 p-4 md:p-6">
             <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Expedientes Finalizados por Año y Mes</h3>
             
@@ -650,8 +658,6 @@ export default function DashboardAgrimensura() {
                             const listaMes = trabajosDashPorAnioYMes[anio][mesNum];
                             const nombreMes = nombresMeses[mesNum] || mesNum;
                             const totalMes = listaMes.length;
-                            const leoMes = listaMes.filter((t: any) => t.encargado === "Leo").length;
-                            const brunoMes = listaMes.filter((t: any) => t.encargado === "Bruno").length;
 
                             return (
                               <div key={keyMesDash} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
@@ -659,22 +665,19 @@ export default function DashboardAgrimensura() {
                                   <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
                                     <span className="text-[#727A4E] text-[10px]">{mesesDashAbiertos[keyMesDash] ? '▼' : '▶'}</span> {nombreMes}
                                   </span>
-                                  <div className="text-xs text-zinc-400 font-bold flex gap-3">
-                                    <span>Total <strong className="text-white">{totalMes} exp</strong></span>
-                                    <span>Leo <strong className="text-[#A4B070]">{leoMes}</strong></span>
-                                    <span>Bruno <strong className="text-[#A4B070]">{brunoMes}</strong></span>
-                                  </div>
+                                  <span className="text-xs text-zinc-400 font-bold">{totalMes} Exp.</span>
                                 </div>
 
                                 {mesesDashAbiertos[keyMesDash] && (
                                   <div className="overflow-x-auto">
-                                    <table className="w-full text-left whitespace-nowrap min-w-[500px]">
+                                    <table className="w-full text-left whitespace-nowrap min-w-[600px]">
                                       <thead>
                                         <tr className="bg-[#1A1A1A] text-[#727A4E] font-bold uppercase text-[10px] tracking-wider border-b border-zinc-800">
                                           <th className="p-3 w-24">Tipo</th>
                                           <th className="p-3">Propietario</th>
-                                          <th className="p-3">Encomienda</th>
+                                          <th className="p-3">Socio</th>
                                           <th className="p-3">Fecha Finalización</th>
+                                          <th className="p-3 w-16 text-center">Editar</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -684,6 +687,9 @@ export default function DashboardAgrimensura() {
                                             <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
                                             <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
                                             <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
+                                            <td className="p-3 text-center">
+                                              <button onClick={() => setTrabajoEditandoDash({ ...t })} className="text-sm bg-[#222] hover:bg-[#333] border border-zinc-700 px-2 py-1 rounded text-white" title="Editar Expediente">✏️</button>
+                                            </td>
                                           </tr>
                                         ))}
                                       </tbody>
@@ -701,23 +707,43 @@ export default function DashboardAgrimensura() {
               </div>
             )}
           </div>
+        </div>
+      )}
 
-          {/* DISTRIBUCIÓN POR TIPO DE TRABAJO */}
-          <div className="bg-[#1A1A1A] p-6 rounded-xl border border-zinc-800 shadow-lg">
-            <h3 className="font-bold text-white uppercase tracking-widest text-sm mb-4">Cantidad por Tipo de Trabajo (según filtros)</h3>
-            {tiposOrdenadosDash.length === 0 ? (
-              <p className="text-zinc-500 text-sm">No hay datos registrados aún.</p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {tiposOrdenadosDash.map(([tipo, cantidad]: any) => (
-                  <div key={tipo} className="bg-[#222] p-4 rounded-lg border border-zinc-800 text-center">
-                    <span className="text-xs text-[#727A4E] font-bold block truncate">{tipo}</span>
-                    <span className="text-2xl font-black text-white mt-1 block">{cantidad}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* MODAL DE EDICIÓN RÁPIDA DE EXPEDIENTE */}
+      {trabajoEditandoDash && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <form onSubmit={guardarEdicionRapidaDash} className="bg-[#1A1A1A] border border-zinc-700 p-6 rounded-xl max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="font-black text-white text-base tracking-widest uppercase border-b border-zinc-800 pb-2">Editar Expediente</h3>
+            
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Tipo de Trámite</label>
+              <input type="text" className="w-full bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs" value={trabajoEditandoDash.tipo || ""} onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, tipo: e.target.value})} required />
+            </div>
+
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Propietario</label>
+              <input type="text" className="w-full bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs" value={trabajoEditandoDash.propietario || ""} onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, propietario: e.target.value})} required />
+            </div>
+
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Socio Encargado</label>
+              <select className="w-full bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs" value={trabajoEditandoDash.encargado || "Leo"} onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, encargado: e.target.value})}>
+                <option value="Leo">Leo</option>
+                <option value="Bruno">Bruno</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Fecha de Finalización (Año / Mes / Día)</label>
+              <input type="date" className="w-full bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs cursor-pointer" value={trabajoEditandoDash.fecha_finalizacion ? trabajoEditandoDash.fecha_finalizacion.substring(0,10) : ""} onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, fecha_finalizacion: e.target.value})} required />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-zinc-800">
+              <button type="button" onClick={() => setTrabajoEditandoDash(null)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded uppercase">Cancelar</button>
+              <button type="submit" className="px-4 py-2 bg-[#727A4E] hover:bg-[#8B9461] text-white text-xs font-bold rounded uppercase">Guardar Cambios</button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -731,7 +757,6 @@ export default function DashboardAgrimensura() {
 
           {subTabTrabajos === "activos" && (
             <>
-              {/* FORMULARIO RESPONSIVO */}
               <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col lg:flex-row lg:items-end gap-4 border border-zinc-800">
                 <div className="w-full lg:w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.tipo} onChange={e => setNuevoTrabajo({...nuevoTrabajo, tipo: e.target.value})} placeholder="Ej: M"/></div>
                 <div className="w-full lg:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.propietario} onChange={e => setNuevoTrabajo({...nuevoTrabajo, propietario: e.target.value})} placeholder="Ej: Juan Perez"/></div>
@@ -748,7 +773,6 @@ export default function DashboardAgrimensura() {
 
               <div className="space-y-6">
                 
-                {/* EXPEDIENTES LEO */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
                     <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo</h3>
@@ -781,7 +805,6 @@ export default function DashboardAgrimensura() {
                   )}
                 </div>
 
-                {/* EXPEDIENTES BRUNO */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
                     <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno</h3>
@@ -924,7 +947,7 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: MEDICIONES */}
+      {/* OTRAS PESTAÑAS (MEDICIONES, CATASTRO, FINANZAS, HISTORIAL) SE MANTIENEN IGUAL */}
       {activeTab === "mediciones" && (
         <div className="space-y-8">
            <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
@@ -1013,7 +1036,6 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: CATASTRO */}
       {activeTab === "catastro" && (
         <div className="flex flex-col items-center justify-center pt-4 md:pt-10 px-2">
           <div className={`p-8 md:p-12 rounded-3xl shadow-2xl w-full max-w-2xl text-center border-4 ${catastro.usuario === 'Libre' ? 'bg-green-100 border-green-500' : 'bg-red-100 border-red-500'}`}>
@@ -1036,7 +1058,6 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: FINANZAS */}
       {activeTab === "finanzas" && (
         <div className="space-y-6">
           <div className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg border border-zinc-800">
@@ -1133,7 +1154,6 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* PESTAÑA: HISTORIAL FINANZAS */}
       {activeTab === "historial" && (
         <div className="space-y-4">
           <h2 className="text-xl md:text-2xl font-black tracking-widest text-white mb-6 uppercase border-b border-zinc-800 pb-4">Finanzas Liquidadas</h2>
@@ -1238,7 +1258,7 @@ export default function DashboardAgrimensura() {
                                                     return (
                                                       <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
-                                                        <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
+                                                        <td className="p-3 text-zinc-400">{h.es_galo_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
                                                         <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
