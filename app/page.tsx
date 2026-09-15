@@ -218,7 +218,7 @@ export default function DashboardAgrimensura() {
     const fechaInicio = new Date(`${m.fecha}T${m.hora}:00-03:00`);
     const fechaFin = new Date(fechaInicio.getTime() + (2 * 60 * 60 * 1000));
     const f = (date: Date) => date.toISOString().replace(/-|:|\.\d\d\d/g, "");
-    const invitados = "bruno.verga@email.com,leo.scolari@email.com"; 
+    const invitados = "leandroscolari14@gmail.com,brunoverga13@gmail.com"; 
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`📐 Medición: ${m.titulo}`)}&dates=${f(fechaInicio)}/${f(fechaFin)}&location=${encodeURIComponent(m.ubicacion)}&details=${encodeURIComponent(`Turno SURVEY.`)}&add=${invitados}`;
   };
 
