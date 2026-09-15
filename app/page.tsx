@@ -28,7 +28,7 @@ export default function DashboardAgrimensura() {
   const [tiempoUso, setTiempoUso] = useState("");
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   const tipoInputRef = useRef<HTMLInputElement>(null);
-  const notasInputRef = useRef<HTMLInputElement>(null); // REF PARA AUTOFOCUS EN NOTAS
+  const notasInputRef = useRef<HTMLInputElement>(null);
 
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
@@ -147,10 +147,8 @@ export default function DashboardAgrimensura() {
     if (t.encargado === "Leo") setLeoAbierto(true);
     if (t.encargado === "Bruno") setBrunoAbierto(true);
     
-    // Auto-focus al input de Notas con un pequeño timeout para que react renderice primero
     setTimeout(() => {
       notasInputRef.current?.focus();
-      // Opcional: Esto mueve el scroll hacia arriba para que veas el formulario
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
   };
@@ -227,10 +225,7 @@ export default function DashboardAgrimensura() {
     return { cobradoLeo, limpioLeoTotal: gananciaPuraLeo, gastosLeo: gastosSalientesLeo, balanceLeo: (cobradoLeo - gastosSalientesLeo) - (gananciaPuraLeo - deuda5050Leo), cobradoBruno, limpioBrunoTotal: gananciaPuraBruno, gastosBruno: gastosSalientesBruno, balanceBruno: (cobradoBruno - gastosSalientesBruno) - (gananciaPuraBruno - deuda5050Bruno) };
   };
 
-  // Se calculan los resúmenes tanto de la semana actual como del historial completo
   const resumenActual = generarResumen(finanzas);
-  const resumenHistorialTotal = generarResumen(historial);
-
   const trabajosLeo = trabajosActivos.filter((t: any) => t.encargado === "Leo");
   const trabajosBruno = trabajosActivos.filter((t: any) => t.encargado === "Bruno");
 
@@ -649,16 +644,24 @@ export default function DashboardAgrimensura() {
                 
                 {estaAbierto && (
                   <div>
-                    <div className="bg-[#1A1A1A] p-4 md:p-6 border-b border-zinc-800 flex flex-col sm:flex-row justify-around gap-4 sm:gap-0">
-                      <div className="text-center bg-[#222] sm:bg-transparent p-3 sm:p-0 rounded-lg">
-                        <span className="text-[10px] md:text-xs font-black tracking-widest text-[#727A4E] block mb-1">BALANCE LEO (CERRADO)</span>
-                        <span className={`font-black text-lg md:text-xl tracking-wide ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-zinc-200'}`}>{resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}</span>
+                    {/* PANEL DE RESUMEN INDIVIDUAL DE CADA SEMANA CERRADA */}
+                    <div className="bg-[#1A1A1A] p-4 md:p-6 border-b border-zinc-800 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
+                        <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO LEO (SEMANA)</span>
+                        <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
+                        <p className={`text-base font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                          {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
+                        </p>
                       </div>
-                      <div className="text-center bg-[#222] sm:bg-transparent p-3 sm:p-0 rounded-lg">
-                        <span className="text-[10px] md:text-xs font-black tracking-widest text-[#727A4E] block mb-1">BALANCE BRUNO (CERRADO)</span>
-                        <span className={`font-black text-lg md:text-xl tracking-wide ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-zinc-200'}`}>{resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}</span>
+                      <div className="bg-[#222] p-4 rounded-xl border border-zinc-800 text-center sm:text-left">
+                        <span className="text-xs font-black tracking-widest text-[#727A4E] block mb-2">SOCIO BRUNO (SEMANA)</span>
+                        <p className="text-sm text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
+                        <p className={`text-base font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                          {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
+                        </p>
                       </div>
                     </div>
+
                     <div className="overflow-x-auto">
                       <table className="w-full text-left whitespace-nowrap min-w-[700px]">
                         <thead><tr className="bg-[#222222] text-zinc-400 uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Tipo</th><th className="p-4">Propietario</th><th className="p-4">Entró Por</th><th className="p-4">Total/Gasto</th><th className="p-4">Limpio Leo</th><th className="p-4">Limpio Bruno</th></tr></thead>
@@ -684,20 +687,6 @@ export default function DashboardAgrimensura() {
               </div>
             );
           })}
-
-          {/* TOTAL HISTÓRICO AL FINAL */}
-          {historial.length > 0 && (
-            <div className="mt-12 bg-[#1A1A1A] border-t-4 border-[#727A4E] rounded-b-xl shadow-2xl p-6 md:p-8 flex flex-col md:flex-row justify-around items-center gap-6">
-              <div className="text-center w-full md:w-1/2 border-b md:border-b-0 md:border-r border-zinc-800 pb-6 md:pb-0 md:pr-6">
-                <h4 className="text-zinc-500 font-black tracking-widest text-xs mb-2">GANANCIA TOTAL LEO (HISTÓRICA)</h4>
-                <p className="text-3xl md:text-4xl font-black text-white">${formatearPlata(resumenHistorialTotal.limpioLeoTotal)}</p>
-              </div>
-              <div className="text-center w-full md:w-1/2 pt-2 md:pt-0 md:pl-6">
-                <h4 className="text-zinc-500 font-black tracking-widest text-xs mb-2">GANANCIA TOTAL BRUNO (HISTÓRICA)</h4>
-                <p className="text-3xl md:text-4xl font-black text-white">${formatearPlata(resumenHistorialTotal.limpioBrunoTotal)}</p>
-              </div>
-            </div>
-          )}
 
         </div>
       )}
