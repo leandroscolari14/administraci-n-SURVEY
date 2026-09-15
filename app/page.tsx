@@ -28,6 +28,7 @@ export default function DashboardAgrimensura() {
   const [tiempoUso, setTiempoUso] = useState("");
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   const tipoInputRef = useRef<HTMLInputElement>(null);
+  const notasInputRef = useRef<HTMLInputElement>(null); // REF PARA AUTOFOCUS EN NOTAS
 
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
@@ -145,6 +146,13 @@ export default function DashboardAgrimensura() {
     });
     if (t.encargado === "Leo") setLeoAbierto(true);
     if (t.encargado === "Bruno") setBrunoAbierto(true);
+    
+    // Auto-focus al input de Notas con un pequeño timeout para que react renderice primero
+    setTimeout(() => {
+      notasInputRef.current?.focus();
+      // Opcional: Esto mueve el scroll hacia arriba para que veas el formulario
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   };
 
   const toggleEtapa = async (id: string, etapa: string, valorActual: boolean) => {
@@ -299,7 +307,7 @@ export default function DashboardAgrimensura() {
               <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col lg:flex-row lg:items-end gap-4 border border-zinc-800">
                 <div className="w-full lg:w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.tipo} onChange={e => setNuevoTrabajo({...nuevoTrabajo, tipo: e.target.value})} placeholder="Ej: M"/></div>
                 <div className="w-full lg:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.propietario} onChange={e => setNuevoTrabajo({...nuevoTrabajo, propietario: e.target.value})} placeholder="Ej: Juan Perez"/></div>
-                <div className="w-full lg:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas (Opcional)</label><input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/></div>
+                <div className="w-full lg:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas (Opcional)</label><input ref={notasInputRef} className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/></div>
                 <div className="flex gap-4 w-full lg:w-auto">
                   <div className="w-full lg:w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Encargado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
                   <div className="w-full lg:w-48"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Estado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Ingresado</option><option value="amarillo">Pendiente</option></select></div>
