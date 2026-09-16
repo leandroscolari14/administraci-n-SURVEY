@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -43,7 +43,6 @@ export default function DashboardAgrimensura() {
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   
-  // Modal o estado para editar expedientes finalizados rápidamente
   const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
@@ -70,7 +69,9 @@ export default function DashboardAgrimensura() {
   const [filtroSocioDashboard, setFiltroSocioDashboard] = useState("Todos");
   const [filtroTipoDashboard, setFiltroTipoDashboard] = useState("Todos");
 
-  const mapRef = useRef<any>(null);
+  // Referencias para Leaflet (Mapa persistente)
+  const mapInstanceRef = useRef<any>(null);
+  const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { cargarDatos(); }, []);
@@ -421,45 +422,56 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  // FILTROS AVANZADOS PARA EL DASHBOARD Y MAPA
-  const listaTrabajosParaDashboard = trabajosFinalizados.filter((t: any) => {
-    const coincideAnio = filtroAnioDashboard === "Todos" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
-    const coincideSocio = filtroSocioDashboard === "Todos" || t.encargado === filtroSocioDashboard;
-    const coincideTipo = filtroTipoDashboard === "Todos" || (t.tipo && t.tipo.trim().toUpperCase() === filtroTipoDashboard.toUpperCase());
-    return coincideAnio && coincideSocio && coincideTipo;
-  });
+  // FILTROS AVANZADOS MEMOIZADOS PARA EL DASHBOARD Y MAPA
+  const listaTrabajosParaDashboard = useMemo(() => {
+    return trabajosFinalizados.filter((t: any) => {
+      const coincideAnio = filtroAnioDashboard === "Todos" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
+      const coincideSocio = filtroSocioDashboard === "Todos" || t.encargado === filtroSocioDashboard;
+      const coincideTipo = filtroTipoDashboard === "Todos" || (t.tipo && t.tipo.trim().toUpperCase() === filtroTipoDashboard.toUpperCase());
+      return coincideAnio && coincideSocio && coincideTipo;
+    });
+  }, [trabajosFinalizados, filtroAnioDashboard, filtroSocioDashboard, filtroTipoDashboard]);
 
   const totalTrabajosDash = listaTrabajosParaDashboard.length;
   const cantLeoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Leo").length;
   const cantBrunoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Bruno").length;
 
-  const trabajosDashPorAnioYMes = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
-    const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
-    const mesNum = t.fecha_finalizacion ? t.fecha_finalizacion.substring(5, 7) : "00";
-    if (!acc[anio]) acc[anio] = {};
-    if (!acc[anio][mesNum]) acc[anio][mesNum] = [];
-    acc[anio][mesNum].push(t);
-    return acc;
-  }, {});
+  const trabajosDashPorAnioYMes = useMemo(() => {
+    return listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
+      const anio = t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : "Sin Fecha";
+      const mesNum = t.fecha_finalizacion ? t.fecha_finalizacion.substring(5, 7) : "00";
+      if (!acc[anio]) acc[anio] = {};
+      if (!acc[anio][mesNum]) acc[anio][mesNum] = [];
+      acc[anio][mesNum].push(t);
+      return acc;
+    }, {});
+  }, [listaTrabajosParaDashboard]);
 
   const aniosDashOrdenados = Object.keys(trabajosDashPorAnioYMes).sort((a, b) => b.localeCompare(a));
   const toggleAnioDash = (anio: string) => setAniosDashAbiertos({ ...aniosDashAbiertos, [anio]: !aniosDashAbiertos[anio] });
   const toggleMesDash = (key: string) => setMesesDashAbiertos({ ...mesesDashAbiertos, [key]: !mesesDashAbiertos[key] });
 
-  const tiposConteoDash = listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
-    const tp = (t.tipo || "Otro").trim().toUpperCase();
-    acc[tp] = (acc[tp] || 0) + 1;
-    return acc;
-  }, {});
+  const tiposConteoDash = useMemo(() => {
+    return listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
+      const tp = (t.tipo || "Otro").trim().toUpperCase();
+      acc[tp] = (acc[tp] || 0) + 1;
+      return acc;
+    }, {});
+  }, [listaTrabajosParaDashboard]);
+
   const tiposOrdenadosDash = Object.entries(tiposConteoDash).sort((a: any, b: any) => b[1] - a[1]);
 
-  const anosDisponibles = Array.from(new Set([
-    ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null)
-  ])).filter(Boolean).sort((a: any, b: any) => b.localeCompare(a));
+  const anosDisponibles = useMemo(() => {
+    return Array.from(new Set([
+      ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null)
+    ])).filter(Boolean).sort((a: any, b: any) => b.localeCompare(a));
+  }, [trabajosFinalizados]);
 
-  const tiposDisponibles = Array.from(new Set([
-    ...trabajosFinalizados.map((t: any) => t.tipo ? t.tipo.trim().toUpperCase() : null)
-  ])).filter(Boolean).sort();
+  const tiposDisponibles = useMemo(() => {
+    return Array.from(new Set([
+      ...trabajosFinalizados.map((t: any) => t.tipo ? t.tipo.trim().toUpperCase() : null)
+    ])).filter(Boolean).sort();
+  }, [trabajosFinalizados]);
 
   const obtenerColorPin = (tipo: string) => {
     const tp = (tipo || "").trim().toUpperCase();
@@ -474,6 +486,7 @@ export default function DashboardAgrimensura() {
     return "#eab308";
   };
 
+  // INICIALIZACIÓN DEL MAPA LEAFLET (SÓLO 1 VEZ) Y ACTUALIZACIÓN DE MARCADORES SIN DESTRUIR EL MAPA
   useEffect(() => {
     if (activeTab !== "dashboard") return;
 
@@ -485,37 +498,43 @@ export default function DashboardAgrimensura() {
       document.head.appendChild(link);
     }
 
-    const initMapWithLeaflet = () => {
-      if (!(window as any).L || !mapContainerRef.current) return;
+    const initMap = () => {
+      const L = (window as any).L;
+      if (!L || !mapContainerRef.current) return;
 
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
+      // Crear el mapa solo si no existe
+      if (!mapInstanceRef.current) {
+        const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12);
+        mapInstanceRef.current = map;
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        markersLayerRef.current = L.layerGroup().addTo(map);
       }
 
-      const L = (window as any).L;
-      const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12);
-      mapRef.current = map;
+      // Actualizar únicamente los marcadores sin recargar ni resetear el zoom ni la posición
+      if (markersLayerRef.current) {
+        markersLayerRef.current.clearLayers();
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
+        listaTrabajosParaDashboard.forEach((t: any) => {
+          if (t.lat && t.lng) {
+            const colorPin = obtenerColorPin(t.tipo);
+            const markerIcon = L.divIcon({
+              className: 'custom-pin',
+              html: `<div style="background-color: ${colorPin}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.6);"></div>`,
+              iconSize: [14, 14],
+              iconAnchor: [7, 7]
+            });
 
-      listaTrabajosParaDashboard.forEach((t: any) => {
-        if (t.lat && t.lng) {
-          const colorPin = obtenerColorPin(t.tipo);
-          const markerIcon = L.divIcon({
-            className: 'custom-pin',
-            html: `<div style="background-color: ${colorPin}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.6);"></div>`,
-            iconSize: [14, 14],
-            iconAnchor: [7, 7]
-          });
-
-          const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon }).addTo(map);
-          marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
-        }
-      });
+            const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon });
+            marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
+            markersLayerRef.current.addLayer(marker);
+          }
+        });
+      }
     };
 
     if (!(window as any).L) {
@@ -523,13 +542,13 @@ export default function DashboardAgrimensura() {
         const script = document.createElement("script");
         script.id = "leaflet-js";
         script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-        script.onload = initMapWithLeaflet;
+        script.onload = initMap;
         document.body.appendChild(script);
       }
     } else {
-      initMapWithLeaflet();
+      initMap();
     }
-  }, [activeTab, filtroAnioDashboard, filtroSocioDashboard, filtroTipoDashboard, listaTrabajosParaDashboard]);
+  }, [activeTab, listaTrabajosParaDashboard]);
 
   return (
     <div className="min-h-screen bg-[#111111] p-4 md:p-8 font-sans text-zinc-300 overflow-x-hidden">
@@ -628,7 +647,6 @@ export default function DashboardAgrimensura() {
             <div ref={mapContainerRef} className="w-full h-[450px] rounded-xl overflow-hidden border border-zinc-700 bg-[#161616] relative z-0"></div>
           </div>
 
-          {/* LISTA DE EXPEDIENTES CON BOTÓN DE EDITAR */}
           <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800 p-4 md:p-6">
             <h3 className="font-bold text-white tracking-widest uppercase text-sm mb-4">Expedientes Finalizados por Año y Mes</h3>
             
@@ -947,7 +965,6 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
-      {/* OTRAS PESTAÑAS (MEDICIONES, CATASTRO, FINANZAS, HISTORIAL) SE MANTIENEN IGUAL */}
       {activeTab === "mediciones" && (
         <div className="space-y-8">
            <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
@@ -1214,7 +1231,7 @@ export default function DashboardAgrimensura() {
                                             <span className="text-zinc-400 text-[10px] font-bold px-2 py-0.5 bg-[#111] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
                                           </h4>
                                           <div className="flex gap-2 w-full md:w-auto justify-end">
-                                            <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
+                                            <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir}...</button>
                                             <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
                                           </div>
                                         </div>
@@ -1258,7 +1275,7 @@ export default function DashboardAgrimensura() {
                                                     return (
                                                       <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
-                                                        <td className="p-3 text-zinc-400">{h.es_galo_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
+                                                        <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
                                                         <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
