@@ -90,14 +90,19 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
+    const { data: dataTrabajos, error } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
+    if (error) {
+      console.error("Error al cargar trabajos:", error.message);
+    }
+
     if (dataTrabajos) {
+      // Consideramos activo si finalizado es falsy (false, null o undefined)
       setTrabajosActivos(dataTrabajos.filter((t: any) => !t.finalizado));
-      setTrabajosFinalizados(dataTrabajos.filter((t: any) => t.finalizado));
+      setTrabajosFinalizados(dataTrabajos.filter((t: any) => t.finalizado === true));
     }
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
