@@ -90,24 +90,18 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    const { data: dataTrabajos, error: errorTrabajos } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
+    const { data: dataTrabajos, error: errorTrabajos } = await supabase.from("trabajos_curso").select("*");
     
-    if (errorTrabajos) {
-      alert(`⚠️ Error al cargar la base de datos: ${errorTrabajos.message}`);
-    }
+    console.log("DATOS CRUDOS DE SUPABASE:", dataTrabajos);
+    console.log("ERROR DE SUPABASE:", errorTrabajos);
 
-    const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
-    const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
+    const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
+    const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true);
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
     if (dataTrabajos) {
-      // Activos son los que NO tienen fecha de finalización cargada
-      const activos = dataTrabajos.filter((t: any) => !t.fecha_finalizacion);
-      // Finalizados son los que SÍ tienen fecha o finalizado en true
-      const finalizados = dataTrabajos.filter((t: any) => t.fecha_finalizacion || t.finalizado === true);
-      
-      setTrabajosActivos(activos);
-      setTrabajosFinalizados(finalizados);
+      setTrabajosActivos(dataTrabajos); // TODO A ACTIVO PARA VER SI AL MENOS MUESTRA LOS 660
+      setTrabajosFinalizados(dataTrabajos);
     }
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
