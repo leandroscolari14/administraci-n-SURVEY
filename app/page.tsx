@@ -952,7 +952,9 @@ export default function DashboardAgrimensura() {
                               <td className="p-3 w-[52%] align-middle"><RenderEtapas t={t} /></td>
                               <td className="p-3 w-[22%] align-middle text-right">
                                 <div className="flex gap-1.5 justify-end items-center flex-nowrap">
-                                  <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+                                  {!t.e_medido && (
+                                    <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+                                  )}
                                   <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded text-white" title="Editar Expediente">✏️</button>
                                   <button onClick={() => finalizarTrabajo(t)} className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2 py-1.5 rounded text-emerald-300 font-bold" title="Finalizar">✅</button>
                                   <button onClick={() => eliminarTrabajo(t.id)} className="text-xs bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2 py-1.5 rounded text-red-400 font-bold" title="Eliminar">🗑️</button>
@@ -989,7 +991,9 @@ export default function DashboardAgrimensura() {
                               <td className="p-3 w-[52%] align-middle"><RenderEtapas t={t} /></td>
                               <td className="p-3 w-[22%] align-middle text-right">
                                 <div className="flex gap-1.5 justify-end items-center flex-nowrap">
-                                  <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+                                  {!t.e_medido && (
+                                    <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+                                  )}
                                   <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded text-white" title="Editar Expediente">✏️</button>
                                   <button onClick={() => finalizarTrabajo(t)} className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2 py-1.5 rounded text-emerald-300 font-bold" title="Finalizar">✅</button>
                                   <button onClick={() => eliminarTrabajo(t.id)} className="text-xs bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2 py-1.5 rounded text-red-400 font-bold" title="Eliminar">🗑️</button>
