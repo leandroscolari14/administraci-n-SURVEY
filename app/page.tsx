@@ -102,8 +102,11 @@ export default function DashboardAgrimensura() {
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
     if (dataTrabajos) {
-      setTrabajosActivos(dataTrabajos.filter((t: any) => !t.finalizado));
-      setTrabajosFinalizados(dataTrabajos.filter((t: any) => t.finalizado === true));
+      const activos = dataTrabajos.filter((t: any) => t.finalizado === false || t.finalizado === null || t.finalizado === undefined);
+      const finalizados = dataTrabajos.filter((t: any) => t.finalizado === true);
+      
+      setTrabajosActivos(activos);
+      setTrabajosFinalizados(finalizados);
     }
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
