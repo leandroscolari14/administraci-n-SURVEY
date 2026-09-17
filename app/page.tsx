@@ -94,7 +94,6 @@ export default function DashboardAgrimensura() {
     
     if (errorTrabajos) {
       alert(`⚠️ Error al cargar la base de datos: ${errorTrabajos.message}`);
-      console.error("Error Supabase:", errorTrabajos);
     }
 
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
@@ -102,8 +101,10 @@ export default function DashboardAgrimensura() {
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
     if (dataTrabajos) {
-      const activos = dataTrabajos.filter((t: any) => t.finalizado === false || t.finalizado === null || t.finalizado === undefined);
-      const finalizados = dataTrabajos.filter((t: any) => t.finalizado === true);
+      // Activos son los que NO tienen fecha de finalización cargada
+      const activos = dataTrabajos.filter((t: any) => !t.fecha_finalizacion);
+      // Finalizados son los que SÍ tienen fecha o finalizado en true
+      const finalizados = dataTrabajos.filter((t: any) => t.fecha_finalizacion || t.finalizado === true);
       
       setTrabajosActivos(activos);
       setTrabajosFinalizados(finalizados);
