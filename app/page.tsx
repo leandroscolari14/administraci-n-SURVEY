@@ -90,17 +90,24 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    // Intentamos traer los datos y forzar un alert con lo que devuelve
-    const { data, error } = await supabase.from("trabajos_curso").select("*");
+    const { data: dataTrabajos, error: errorTrabajos } = await supabase.from("trabajos_curso").select("*");
     
-    if (error) {
-      alert("Error de conexión: " + error.message);
-    } else {
-      alert("¡Conectado! Registros encontrados: " + (data ? data.length : 0));
-      if (data && data.length > 0) {
-        setTrabajosActivos(data);
-      }
+    const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
+    const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true);
+    const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
+    
+    if (dataTrabajos) {
+      // Activos son los que tienen finalizado en falso o nulo
+      const activos = dataTrabajos.filter((t: any) => t.finalizado === false || t.finalizado === null);
+      // Finalizados son los que tienen finalizado en true
+      const finalizados = dataTrabajos.filter((t: any) => t.finalizado === true);
+      
+      setTrabajosActivos(activos);
+      setTrabajosFinalizados(finalizados);
     }
+    if (dataFinanzas) setFinanzas(dataFinanzas);
+    if (dataHistorial) setHistorial(dataHistorial);
+    if (dataCatastro && dataCatastro.length > 0) setCatastro({ usuario: dataCatastro[0].usuario, fecha: dataCatastro[0].fecha_actualizacion });
   };
 
   const enviarTelegram = async (mensaje: string, fotoUrl?: string) => {
