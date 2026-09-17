@@ -39,7 +39,6 @@ export default function DashboardAgrimensura() {
   const tipoInputRef = useRef<HTMLInputElement>(null);
   const notasInputRef = useRef<HTMLInputElement>(null);
 
-  // NUEVO ESTADO EXPEDIENTE CON UBICACIÓN Y MAPA
   const [nuevoTrabajo, setNuevoTrabajo] = useState({ 
     tipo: "", 
     propietario: "", 
@@ -91,14 +90,15 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    const { data: dataTrabajosActivos } = await supabase.from("trabajos_curso").select("*").eq("finalizado", false).order("fecha_actualizacion", { ascending: false });
-    const { data: dataTrabajosFin } = await supabase.from("trabajos_curso").select("*").eq("finalizado", true).range(0, 1500).order("fecha_finalizacion", { ascending: false });
+    const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
-    if (dataTrabajosActivos) setTrabajosActivos(dataTrabajosActivos);
-    if (dataTrabajosFin) setTrabajosFinalizados(dataTrabajosFin);
+    if (dataTrabajos) {
+      setTrabajosActivos(dataTrabajos.filter((t: any) => !t.finalizado));
+      setTrabajosFinalizados(dataTrabajos.filter((t: any) => t.finalizado));
+    }
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
     if (dataCatastro && dataCatastro.length > 0) setCatastro({ usuario: dataCatastro[0].usuario, fecha: dataCatastro[0].fecha_actualizacion });
@@ -155,12 +155,10 @@ export default function DashboardAgrimensura() {
     else setNuevaFinanza({ ...nuevaFinanza, esGasto5050: false, tramite: "VEP", propietario: "", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
   };
 
-  // BUSCADOR NOMINATIM PRIORIZANDO SANTA FE Y SANTO TOMÉ
   const buscarDireccionNominatim = async (query: string) => {
     setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
     if (query.length < 3) { setSugerenciasDireccion([]); return; }
     try {
-      // Priorizamos Santa Fe y Santo Tomé en la búsqueda añadiendo contexto geográfico
       const queryConCiudad = `${query}, Santa Fe, Argentina`;
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryConCiudad)}&countrycodes=ar&limit=5`);
       const data = await res.json();
@@ -189,14 +187,19 @@ export default function DashboardAgrimensura() {
       encargado: nuevoTrabajo.encargado,
       ubicacion: nuevoTrabajo.ubicacion,
       lat: nuevoTrabajo.lat ? Number(nuevoTrabajo.lat) : null,
-      lng: nuevoTrabajo.lng ? Number(nuevoTrabajo.lng) : null
+      lng: nuevoTrabajo.lng ? Number(nuevoTrabajo.lng) : null,
+      finalizado: false
     };
 
     if (editandoTrabajoId) {
       await supabase.from("trabajos_curso").update(datosGuardar).eq("id", editandoTrabajoId);
       setEditandoTrabajoId(null);
     } else {
-      await supabase.from("trabajos_curso").insert([datosGuardar]);
+      const { error } = await supabase.from("trabajos_curso").insert([datosGuardar]);
+      if (error) {
+        alert(`Error al guardar: ${error.message}`);
+        return;
+      }
     }
     setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });
     cargarDatos();
@@ -267,7 +270,6 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  // LINK DE GOOGLE CALENDAR CON INVITACIÓN A AMBOS MAILS
   const generarLinkCalendarExpediente = (t: any) => {
     const titulo = `Medición / Coordinación: ${t.tipo || 'Trámite'} - ${t.propietario || t.nombre_expediente}`;
     const fechaManana = new Date();
