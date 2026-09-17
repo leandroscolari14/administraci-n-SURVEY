@@ -94,7 +94,8 @@ export default function DashboardAgrimensura() {
 
   const cargarDatos = async () => {
     const { data: dataTrabajosActivos } = await supabase.from("trabajos_curso").select("*").eq("finalizado", false).order("fecha_actualizacion", { ascending: false });
-    const { data: dataTrabajosFin } = await supabase.from("trabajos_curso").select("*").eq("finalizado", true).order("fecha_finalizacion", { ascending: false });
+    // Consulta con rango extendido para evitar el tope por defecto de 1000 filas de Supabase
+    const { data: dataTrabajosFin } = await supabase.from("trabajos_curso").select("*").eq("finalizado", true).range(0, 1500).order("fecha_finalizacion", { ascending: false });
     
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
@@ -486,14 +487,9 @@ export default function DashboardAgrimensura() {
     return "#eab308";
   };
 
-// Referencia para saber si el mapa ya fue creado una vez
-  const mapInitializedRef = useRef(false);
-
+  // INICIALIZACIÓN DEL MAPA LEAFLET ESTABLE (CREA UNA SOLA VEZ Y ACTUALIZA MARCADORES SIN RESETEAR VISTA)
   useEffect(() => {
-    if (activeTab !== "dashboard") {
-      mapInitializedRef.current = false; // Si salimos de la pestaña, permitimos reinicializar si vuelve a entrar
-      return;
-    }
+    if (activeTab !== "dashboard") return;
 
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link");
@@ -507,7 +503,6 @@ export default function DashboardAgrimensura() {
       const L = (window as any).L;
       if (!L || !mapContainerRef.current) return;
 
-      // 1. Crear el mapa UNA SOLA VEZ
       if (!mapInstanceRef.current) {
         const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12);
         mapInstanceRef.current = map;
@@ -520,7 +515,6 @@ export default function DashboardAgrimensura() {
         markersLayerRef.current = L.layerGroup().addTo(map);
       }
 
-      // 2. Actualizar los marcadores de forma limpia sin tocar la posición ni el zoom actual
       if (markersLayerRef.current) {
         markersLayerRef.current.clearLayers();
 
@@ -552,19 +546,6 @@ export default function DashboardAgrimensura() {
       }
     } else {
       initOrUpdateMap();
-    }
-  }, [activeTab, listaTrabajosParaDashboard]);
-
-    if (!(window as any).L) {
-      if (!document.getElementById("leaflet-js")) {
-        const script = document.createElement("script");
-        script.id = "leaflet-js";
-        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-        script.onload = initMap;
-        document.body.appendChild(script);
-      }
-    } else {
-      initMap();
     }
   }, [activeTab, listaTrabajosParaDashboard]);
 
@@ -1249,7 +1230,7 @@ export default function DashboardAgrimensura() {
                                             <span className="text-zinc-400 text-[10px] font-bold px-2 py-0.5 bg-[#111] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
                                           </h4>
                                           <div className="flex gap-2 w-full md:w-auto justify-end">
-                                            <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir}...</button>
+                                            <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
                                             <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
                                           </div>
                                         </div>
