@@ -183,29 +183,30 @@ export default function DashboardAgrimensura() {
 
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
-    const datosGuardar = {
+    const datosGuardar: any = {
       tipo: nuevoTrabajo.tipo,
       propietario: nuevoTrabajo.propietario,
       nombre_expediente: `${nuevoTrabajo.tipo} - ${nuevoTrabajo.propietario}`, 
       estado_detalle: nuevoTrabajo.estado,
       color_alerta: nuevoTrabajo.color,
       encargado: nuevoTrabajo.encargado,
-      ubicacion: nuevoTrabajo.ubicacion,
-      lat: nuevoTrabajo.lat ? Number(nuevoTrabajo.lat) : null,
-      lng: nuevoTrabajo.lng ? Number(nuevoTrabajo.lng) : null,
       finalizado: false
     };
 
+    // Solo mandamos ubicación y coordenadas si tienen texto para evitar errores de esquema
+    if (nuevoTrabajo.ubicacion) datosGuardar.ubicacion = nuevoTrabajo.ubicacion;
+    if (nuevoTrabajo.lat) datosGuardar.lat = Number(nuevoTrabajo.lat);
+    if (nuevoTrabajo.lng) datosGuardar.lng = Number(nuevoTrabajo.lng);
+
     if (editandoTrabajoId) {
-      await supabase.from("trabajos_curso").update(datosGuardar).eq("id", editandoTrabajoId);
+      const { error } = await supabase.from("trabajos_curso").update(datosGuardar).eq("id", editandoTrabajoId);
+      if (error) { alert(`Error al actualizar: ${error.message}`); return; }
       setEditandoTrabajoId(null);
     } else {
       const { error } = await supabase.from("trabajos_curso").insert([datosGuardar]);
-      if (error) {
-        alert(`Error al guardar: ${error.message}`);
-        return;
-      }
+      if (error) { alert(`Error al guardar: ${error.message}`); return; }
     }
+    
     setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });
     cargarDatos();
   };
