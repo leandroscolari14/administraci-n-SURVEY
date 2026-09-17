@@ -71,6 +71,9 @@ export default function DashboardAgrimensura() {
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
+  // Estado para el elemento arrastrado (Drag and Drop)
+  const [idTrabajoArrastrando, setIdTrabajoArrastrando] = useState<string | null>(null);
+
   useEffect(() => { cargarDatos(); }, []);
 
   useEffect(() => {
@@ -159,7 +162,6 @@ export default function DashboardAgrimensura() {
     else setNuevaFinanza({ ...nuevaFinanza, esGasto5050: false, tramite: "VEP", propietario: "", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
   };
 
-  // Función inteligente para detectar coordenadas pegadas de Google Maps (ej: -31.69..., -60.78...)
   const parsearCoordenadasPegadas = (texto: string) => {
     const regex = /(-?\d+\.\d+),\s*(-?\d+\.\d+)/;
     const match = texto.match(regex);
@@ -170,7 +172,6 @@ export default function DashboardAgrimensura() {
   };
 
   const buscarDireccionNominatim = async (query: string) => {
-    // Verificamos si pegaron coordenadas juntas tipo Maps (-31.xxxx, -60.xxxx)
     const coordsDetectadas = parsearCoordenadasPegadas(query);
     if (coordsDetectadas) {
       setNuevoTrabajo({ 
@@ -252,6 +253,18 @@ export default function DashboardAgrimensura() {
       notasInputRef.current?.focus();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
+  };
+
+  // Función para soltar y cambiar de encargado al arrastrar
+  const soltarEnEncargado = async (nuevoEncargado: string) => {
+    if (!idTrabajoArrastrando) return;
+    const { error } = await supabase.from("trabajos_curso").update({ encargado: nuevoEncargado }).eq("id", idTrabajoArrastrando);
+    if (error) {
+      alert(`Error al mover expediente: ${error.message}`);
+    } else {
+      setIdTrabajoArrastrando(null);
+      cargarDatos();
+    }
   };
 
   const guardarEdicionRapidaDash = async (e: any) => {
@@ -815,7 +828,7 @@ export default function DashboardAgrimensura() {
                   </div>
                 </div>
 
-                {/* UBICACIÓN Y BUSCADOR TIPO GOOGLE MAPS (CON SOPORTE PARA PEGAR COORDENADAS JUNTAS) */}
+                {/* UBICACIÓN Y BUSCADOR TIPO GOOGLE MAPS */}
                 <div className="relative">
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Dirección o pegá lat,lng directo de Maps)</label>
@@ -859,9 +872,14 @@ export default function DashboardAgrimensura() {
 
               <div className="space-y-6">
                 
-                <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
+                {/* SECCIÓN EXPEDIENTES LEO (Permite soltar elementos arrastrados) */}
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => soltarEnEncargado("Leo")}
+                  className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800"
+                >
                   <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo</h3>
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá acá para mover a Leo)</span></h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosLeo.length} Activos</span>
                   </div>
                   
@@ -870,10 +888,15 @@ export default function DashboardAgrimensura() {
                       <table className="w-full text-left border-collapse min-w-[700px]">
                         <tbody>
                           {trabajosLeo.map((t: any) => (
-                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
+                            <tr 
+                              key={t.id} 
+                              draggable 
+                              onDragStart={() => setIdTrabajoArrastrando(t.id)}
+                              className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors cursor-grab active:cursor-grabbing"
+                            >
                               <td className="p-4 w-1/4">
                                 <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
+                                  <span className="text-zinc-600 text-sm">⠿</span> {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
                                 </div>
                                 <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                                 {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
@@ -893,9 +916,14 @@ export default function DashboardAgrimensura() {
                   )}
                 </div>
 
-                <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
+                {/* SECCIÓN EXPEDIENTES BRUNO (Permite soltar elementos arrastrados) */}
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => soltarEnEncargado("Bruno")}
+                  className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800"
+                >
                   <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno</h3>
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá acá para mover a Bruno)</span></h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosBruno.length} Activos</span>
                   </div>
                   
@@ -904,10 +932,15 @@ export default function DashboardAgrimensura() {
                       <table className="w-full text-left border-collapse min-w-[700px]">
                         <tbody>
                           {trabajosBruno.map((t: any) => (
-                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
+                            <tr 
+                              key={t.id} 
+                              draggable 
+                              onDragStart={() => setIdTrabajoArrastrando(t.id)}
+                              className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors cursor-grab active:cursor-grabbing"
+                            >
                               <td className="p-4 w-1/4">
                                 <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
+                                  <span className="text-zinc-600 text-sm">⠿</span> {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
                                 </div>
                                 <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                                 {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
@@ -1105,7 +1138,7 @@ export default function DashboardAgrimensura() {
                 <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioLeoTotal)}</span></p>
                 <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosLeo)}</span></p>
                 <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                  {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceLeo))}`}
+                  {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formateArPlata(Math.abs(resumenActual.balanceLeo))}`}
                 </p>
               </div>
               <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
@@ -1263,7 +1296,7 @@ export default function DashboardAgrimensura() {
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gase_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
                                                       </tr>
