@@ -97,9 +97,7 @@ export default function DashboardAgrimensura() {
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
     if (dataTrabajos) {
-      // Activos son los que tienen finalizado en falso o nulo
       const activos = dataTrabajos.filter((t: any) => t.finalizado === false || t.finalizado === null);
-      // Finalizados son los que tienen finalizado en true
       const finalizados = dataTrabajos.filter((t: any) => t.finalizado === true);
       
       setTrabajosActivos(activos);
@@ -161,7 +159,30 @@ export default function DashboardAgrimensura() {
     else setNuevaFinanza({ ...nuevaFinanza, esGasto5050: false, tramite: "VEP", propietario: "", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
   };
 
+  // Función inteligente para detectar coordenadas pegadas de Google Maps (ej: -31.69..., -60.78...)
+  const parsearCoordenadasPegadas = (texto: string) => {
+    const regex = /(-?\d+\.\d+),\s*(-?\d+\.\d+)/;
+    const match = texto.match(regex);
+    if (match) {
+      return { lat: match[1], lng: match[2] };
+    }
+    return null;
+  };
+
   const buscarDireccionNominatim = async (query: string) => {
+    // Verificamos si pegaron coordenadas juntas tipo Maps (-31.xxxx, -60.xxxx)
+    const coordsDetectadas = parsearCoordenadasPegadas(query);
+    if (coordsDetectadas) {
+      setNuevoTrabajo({ 
+        ...nuevoTrabajo, 
+        ubicacion: query, 
+        lat: coordsDetectadas.lat, 
+        lng: coordsDetectadas.lng 
+      });
+      setSugerenciasDireccion([]);
+      return;
+    }
+
     setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
     if (query.length < 3) { setSugerenciasDireccion([]); return; }
     try {
@@ -794,18 +815,18 @@ export default function DashboardAgrimensura() {
                   </div>
                 </div>
 
-                {/* UBICACIÓN Y BUSCADOR TIPO GOOGLE MAPS */}
+                {/* UBICACIÓN Y BUSCADOR TIPO GOOGLE MAPS (CON SOPORTE PARA PEGAR COORDENADAS JUNTAS) */}
                 <div className="relative">
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Calle y altura en Santa Fe / Santo Tomé o coordenadas)</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Dirección o pegá lat,lng directo de Maps)</label>
                     <button type="button" onClick={() => setNuevoTrabajo({...nuevoTrabajo, modoCoordenadas: !nuevoTrabajo.modoCoordenadas})} className="text-[10px] text-zinc-400 hover:text-white underline">
-                      {nuevoTrabajo.modoCoordenadas ? "🔍 Usar Buscador de Direcciones" : "📌 Ingresar Lat / Lng Manual"}
+                      {nuevoTrabajo.modoCoordenadas ? "🔍 Usar Buscador de Direcciones" : "📌 Ingresar Lat / Lng Separadas"}
                     </button>
                   </div>
 
                   {!nuevoTrabajo.modoCoordenadas ? (
                     <div>
-                      <input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.ubicacion} onChange={e => buscarDireccionNominatim(e.target.value)} placeholder="Ej: San Martin 2314, Santa Fe..."/>
+                      <input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.ubicacion} onChange={e => buscarDireccionNominatim(e.target.value)} placeholder="Ej: San Martin 2314, Santa Fe o -31.63, -60.70..."/>
                       {sugerenciasDireccion.length > 0 && (
                         <div className="absolute left-0 right-0 bg-[#222] border border-zinc-700 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto">
                           {sugerenciasDireccion.map((item: any, idx: number) => (
