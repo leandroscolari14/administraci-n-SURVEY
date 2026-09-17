@@ -565,7 +565,6 @@ export default function DashboardAgrimensura() {
       if (!L || !mapContainerRef.current) return;
 
       if (!mapInstanceRef.current) {
-        // Capas base: OpenStreetMap y Satélite (Esri World Imagery)
         const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: '&copy; OpenStreetMap'
@@ -579,7 +578,7 @@ export default function DashboardAgrimensura() {
         const map = L.map(mapContainerRef.current, {
           center: [-31.6333, -60.7000],
           zoom: 12,
-          layers: [osmLayer] // Capa por defecto
+          layers: [osmLayer]
         });
         mapInstanceRef.current = map;
 
@@ -942,23 +941,23 @@ export default function DashboardAgrimensura() {
                   
                   {leoAbierto && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[700px]">
+                      <table className="w-full text-left border-collapse min-w-[750px]">
                         <tbody>
                           {trabajosLeo.map((t: any) => (
                             <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                              <td className="p-4 w-1/4">
+                              <td className="p-4 w-[28%]">
                                 <div className={`font-black text-lg flex items-center gap-3 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
                                   <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
                                 </div>
                                 <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                                 {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
                               </td>
-                              <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
-                              <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
-                                <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-xs tracking-wider font-bold uppercase" title="Agendar Medición en Google Calendar">📅 Calendar</a>
-                                <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
-                                <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado y enviar al mapa">✅</button>
-                                <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
+                              <td className="p-4 w-[42%]"><RenderEtapas t={t} /></td>
+                              <td className="p-4 text-right flex gap-2.5 justify-end items-center h-full pt-6 w-[30%]">
+                                <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1.5 rounded text-[11px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+                                <button onClick={() => iniciarEdicionTrabajo(t)} className="text-lg bg-zinc-800 hover:bg-zinc-700 px-2.5 py-1 rounded" title="Editar Expediente">✏️</button>
+                                <button onClick={() => finalizarTrabajo(t)} className="text-lg bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2.5 py-1 rounded text-emerald-300" title="Marcar como Finalizado y enviar al mapa">✅</button>
+                                <button onClick={() => eliminarTrabajo(t.id)} className="text-lg bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2.5 py-1 rounded text-red-400" title="Eliminar definitivamente">🗑️</button>
                               </td>
                             </tr>
                           ))}
@@ -977,23 +976,23 @@ export default function DashboardAgrimensura() {
                   
                   {brunoAbierto && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[700px]">
+                      <table className="w-full text-left border-collapse min-w-[750px]">
                         <tbody>
                           {trabajosBruno.map((t: any) => (
                             <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                              <td className="p-4 w-1/4">
+                              <td className="p-4 w-[28%]">
                                 <div className={`font-black text-lg flex items-center gap-3 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
                                   <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
                                 </div>
                                 <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
                                 {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
                               </td>
-                              <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
-                              <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
-                                <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-xs tracking-wider font-bold uppercase" title="Agendar Medición en Google Calendar">📅 Calendar</a>
-                                <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
-                                <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado y enviar al mapa">✅</button>
-                                <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
+                              <td className="p-4 w-[42%]"><RenderEtapas t={t} /></td>
+                              <td className="p-4 text-right flex gap-2.5 justify-end items-center h-full pt-6 w-[30%]">
+                                <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1.5 rounded text-[11px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+                                <button onClick={() => iniciarEdicionTrabajo(t)} className="text-lg bg-zinc-800 hover:bg-zinc-700 px-2.5 py-1 rounded" title="Editar Expediente">✏️</button>
+                                <button onClick={() => finalizarTrabajo(t)} className="text-lg bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2.5 py-1 rounded text-emerald-300" title="Marcar como Finalizado y enviar al mapa">✅</button>
+                                <button onClick={() => eliminarTrabajo(t.id)} className="text-lg bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2.5 py-1 rounded text-red-400" title="Eliminar definitivamente">🗑️</button>
                               </td>
                             </tr>
                           ))}
