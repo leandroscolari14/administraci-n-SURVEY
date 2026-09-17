@@ -89,7 +89,6 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    // Ordenamos estrictamente por ID ascendente para mantener la posición fija siempre
     const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("id", { ascending: true });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true);
@@ -250,13 +249,29 @@ export default function DashboardAgrimensura() {
     }, 100);
   };
 
-  // Cambio clave: Actualización local instantánea del estado de la etapa SIN reordenar la lista
   const toggleEtapa = async (id: string, etapa: string, valorActual: boolean) => {
-    // 1. Actualizamos de manera optimista el estado local para que no salte ni mande al fondo nada
     setTrabajosActivos(prev => prev.map(t => t.id === id ? { ...t, [etapa]: !valorActual } : t));
-    
-    // 2. Guardamos en segundo plano en Supabase
     await supabase.from("trabajos_curso").update({ [etapa]: !valorActual }).eq("id", id);
+  };
+
+  const guardarEdicionRapidaDash = async (e: any) => {
+    e.preventDefault();
+    if (!trabajoEditandoDash) return;
+    
+    const { error } = await supabase.from("trabajos_curso").update({
+      tipo: trabajoEditandoDash.tipo,
+      propietario: trabajoEditandoDash.propietario,
+      nombre_expediente: `${trabajoEditandoDash.tipo} - ${trabajoEditandoDash.propietario}`,
+      encargado: trabajoEditandoDash.encargado,
+      fecha_finalizacion: trabajoEditandoDash.fecha_finalizacion
+    }).eq("id", trabajoEditandoDash.id);
+
+    if (error) {
+      alert(`Error al actualizar: ${error.message}`);
+    } else {
+      setTrabajoEditandoDash(null);
+      cargarDatos();
+    }
   };
 
   const finalizarTrabajo = async (t: any) => {
@@ -1238,7 +1253,7 @@ export default function DashboardAgrimensura() {
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                        <td className={`p-3 font-bold ${h.es_gase_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
                                                       </tr>
