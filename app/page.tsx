@@ -30,7 +30,6 @@ export default function DashboardAgrimensura() {
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
-  const [mediciones, setMediciones] = useState<any[]>([]);
   
   const [catastro, setCatastro] = useState({ usuario: "Libre", fecha: "" });
   const [tiempoUso, setTiempoUso] = useState("");
@@ -40,26 +39,25 @@ export default function DashboardAgrimensura() {
   const tipoInputRef = useRef<HTMLInputElement>(null);
   const notasInputRef = useRef<HTMLInputElement>(null);
 
-  const [nuevoTrabajo, setNuevoTrabajo] = useState({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
+  // NUEVO ESTADO EXPEDIENTE CON UBICACIÓN Y MAPA
+  const [nuevoTrabajo, setNuevoTrabajo] = useState({ 
+    tipo: "", 
+    propietario: "", 
+    estado: "", 
+    color: "verde", 
+    encargado: "Leo",
+    ubicacion: "",
+    lat: "",
+    lng: "",
+    modoCoordenadas: false
+  });
+  const [sugerenciasDireccion, setSugerenciasDireccion] = useState<any[]>([]);
+
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
-  
   const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
   const [nuevaFinanza, setNuevaFinanza] = useState({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });
-
-  const hoy = new Date().toISOString().split('T')[0];
-  
-  const [nuevaMedicion, setNuevaMedicion] = useState({ 
-    titulo: "", 
-    fecha: hoy, 
-    hora: "14:00", 
-    ubicacion: "", 
-    lat: "", 
-    lng: "", 
-    modoCoordenadas: false 
-  });
-  const [sugerenciasDireccion, setSugerenciasDireccion] = useState<any[]>([]);
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -94,20 +92,16 @@ export default function DashboardAgrimensura() {
 
   const cargarDatos = async () => {
     const { data: dataTrabajosActivos } = await supabase.from("trabajos_curso").select("*").eq("finalizado", false).order("fecha_actualizacion", { ascending: false });
-    // Consulta con rango extendido para evitar el tope por defecto de 1000 filas de Supabase
     const { data: dataTrabajosFin } = await supabase.from("trabajos_curso").select("*").eq("finalizado", true).range(0, 1500).order("fecha_finalizacion", { ascending: false });
-    
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
-    const { data: dataMediciones } = await supabase.from("mediciones").select("*").eq("estado", "pendiente").order("fecha", { ascending: true }).order("hora", { ascending: true });
     
     if (dataTrabajosActivos) setTrabajosActivos(dataTrabajosActivos);
     if (dataTrabajosFin) setTrabajosFinalizados(dataTrabajosFin);
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
     if (dataCatastro && dataCatastro.length > 0) setCatastro({ usuario: dataCatastro[0].usuario, fecha: dataCatastro[0].fecha_actualizacion });
-    if (dataMediciones) setMediciones(dataMediciones);
   };
 
   const enviarTelegram = async (mensaje: string, fotoUrl?: string) => {
@@ -161,6 +155,29 @@ export default function DashboardAgrimensura() {
     else setNuevaFinanza({ ...nuevaFinanza, esGasto5050: false, tramite: "VEP", propietario: "", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
   };
 
+  // BUSCADOR NOMINATIM PRIORIZANDO SANTA FE Y SANTO TOMÉ
+  const buscarDireccionNominatim = async (query: string) => {
+    setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
+    if (query.length < 3) { setSugerenciasDireccion([]); return; }
+    try {
+      // Priorizamos Santa Fe y Santo Tomé en la búsqueda añadiendo contexto geográfico
+      const queryConCiudad = `${query}, Santa Fe, Argentina`;
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryConCiudad)}&countrycodes=ar&limit=5`);
+      const data = await res.json();
+      setSugerenciasDireccion(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const seleccionarSugerencia = (item: any) => {
+    setNuevoTrabajo({
+      ...nuevoTrabajo,
+      ubicacion: item.display_name,
+      lat: item.lat,
+      lng: item.lon
+    });
+    setSugerenciasDireccion([]);
+  };
+
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
     const datosGuardar = {
@@ -169,7 +186,10 @@ export default function DashboardAgrimensura() {
       nombre_expediente: `${nuevoTrabajo.tipo} - ${nuevoTrabajo.propietario}`, 
       estado_detalle: nuevoTrabajo.estado,
       color_alerta: nuevoTrabajo.color,
-      encargado: nuevoTrabajo.encargado
+      encargado: nuevoTrabajo.encargado,
+      ubicacion: nuevoTrabajo.ubicacion,
+      lat: nuevoTrabajo.lat ? Number(nuevoTrabajo.lat) : null,
+      lng: nuevoTrabajo.lng ? Number(nuevoTrabajo.lng) : null
     };
 
     if (editandoTrabajoId) {
@@ -178,7 +198,7 @@ export default function DashboardAgrimensura() {
     } else {
       await supabase.from("trabajos_curso").insert([datosGuardar]);
     }
-    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });
+    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });
     cargarDatos();
   };
 
@@ -189,7 +209,11 @@ export default function DashboardAgrimensura() {
       propietario: t.propietario || t.nombre_expediente || "", 
       estado: t.estado_detalle || "", 
       color: t.color_alerta || "verde", 
-      encargado: t.encargado || "Leo" 
+      encargado: t.encargado || "Leo",
+      ubicacion: t.ubicacion || "",
+      lat: t.lat ? String(t.lat) : "",
+      lng: t.lng ? String(t.lng) : "",
+      modoCoordenadas: false
     });
     if (t.encargado === "Leo") setLeoAbierto(true);
     if (t.encargado === "Bruno") setBrunoAbierto(true);
@@ -227,8 +251,11 @@ export default function DashboardAgrimensura() {
 
   const finalizarTrabajo = async (t: any) => {
     const nombreMostrar = t.tipo ? `${t.tipo} de ${t.propietario}` : t.nombre_expediente;
-    if (confirm(`¿Marcar el expediente "${nombreMostrar}" como FINALIZADO y enviarlo al historial?`)) {
-      await supabase.from("trabajos_curso").update({ finalizado: true, fecha_finalizacion: new Date().toISOString().split('T')[0] }).eq("id", t.id);
+    if (confirm(`¿Marcar el expediente "${nombreMostrar}" como FINALIZADO y enviarlo al historial y mapa?`)) {
+      await supabase.from("trabajos_curso").update({ 
+        finalizado: true, 
+        fecha_finalizacion: new Date().toISOString().split('T')[0] 
+      }).eq("id", t.id);
       cargarDatos();
     }
   };
@@ -240,52 +267,21 @@ export default function DashboardAgrimensura() {
     }
   };
 
-  const buscarDireccionNominatim = async (query: string) => {
-    setNuevaMedicion({ ...nuevaMedicion, ubicacion: query });
-    if (query.length < 3) { setSugerenciasDireccion([]); return; }
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=ar&limit=5`);
-      const data = await res.json();
-      setSugerenciasDireccion(data);
-    } catch (err) { console.error(err); }
-  };
-
-  const seleccionarSugerencia = (item: any) => {
-    setNuevaMedicion({
-      ...nuevaMedicion,
-      ubicacion: item.display_name,
-      lat: item.lat,
-      lng: item.lon
-    });
-    setSugerenciasDireccion([]);
-  };
-
-  const guardarMedicion = async (e: any) => {
-    e.preventDefault();
-    const { error } = await supabase.from("mediciones").insert([{ 
-      titulo: nuevaMedicion.titulo, 
-      fecha: nuevaMedicion.fecha, 
-      hora: nuevaMedicion.hora, 
-      ubicacion: nuevaMedicion.ubicacion,
-      lat: nuevaMedicion.lat ? Number(nuevaMedicion.lat) : null,
-      lng: nuevaMedicion.lng ? Number(nuevaMedicion.lng) : null
-    }]);
-    if (error) return alert(`Error al guardar: ${error.message}`);
-    const [anio, mes, dia] = nuevaMedicion.fecha.split("-");
-    await enviarTelegram(`📐 *NUEVA MEDICIÓN PROGRAMADA*\n\n**Expediente:** ${nuevaMedicion.titulo}\n**Fecha:** ${dia}/${mes}/${anio} a las ${nuevaMedicion.hora}hs\n**Lugar:** ${nuevaMedicion.ubicacion}`);
-    setNuevaMedicion({ titulo: "", fecha: hoy, hora: "14:00", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });
-    cargarDatos();
-  };
-
-  const completarMedicion = async (id: string) => { if (confirm("¿Marcar medición completada?")) { await supabase.from("mediciones").update({ estado: "completado" }).eq("id", id); cargarDatos(); } };
-  const borrarMedicion = async (id: string) => { if (confirm("¿Borrar medición?")) { await supabase.from("mediciones").delete().eq("id", id); cargarDatos(); } };
-  
-  const generarLinkCalendar = (m: any) => {
-    const fechaInicio = new Date(`${m.fecha}T${m.hora}:00-03:00`);
+  // LINK DE GOOGLE CALENDAR CON INVITACIÓN A AMBOS MAILS
+  const generarLinkCalendarExpediente = (t: any) => {
+    const titulo = `Medición / Coordinación: ${t.tipo || 'Trámite'} - ${t.propietario || t.nombre_expediente}`;
+    const fechaManana = new Date();
+    fechaManana.setDate(fechaManana.getDate() + 1);
+    fechaManana.setHours(14, 0, 0, 0);
+    
+    const fechaInicio = fechaManana;
     const fechaFin = new Date(fechaInicio.getTime() + (2 * 60 * 60 * 1000));
     const f = (date: Date) => date.toISOString().replace(/-|:|\.\d\d\d/g, "");
-    const invitados = "leandroscolari14@gmail.com,brunoverga13@gmail.com"; 
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`📐 Medición: ${m.titulo}`)}&dates=${f(fechaInicio)}/${f(fechaFin)}&location=${encodeURIComponent(m.ubicacion)}&details=${encodeURIComponent(`Turno SURVEY.`)}&add=${invitados}`;
+    
+    const invitados = "leandroscolari14@gmail.com,brunoverga13@gmail.com";
+    const ubicacion = t.ubicacion || "Santa Fe, Argentina";
+    
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${f(fechaInicio)}/${f(fechaFin)}&location=${encodeURIComponent(ubicacion)}&details=${encodeURIComponent(`Medición coordinada para expediente de agrimensura.`)}&add=${invitados}`;
   };
 
   const guardarFinanza = async (e: any) => {
@@ -423,7 +419,6 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  // FILTROS AVANZADOS MEMOIZADOS PARA EL DASHBOARD Y MAPA
   const listaTrabajosParaDashboard = useMemo(() => {
     return trabajosFinalizados.filter((t: any) => {
       const coincideAnio = filtroAnioDashboard === "Todos" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
@@ -452,16 +447,6 @@ export default function DashboardAgrimensura() {
   const toggleAnioDash = (anio: string) => setAniosDashAbiertos({ ...aniosDashAbiertos, [anio]: !aniosDashAbiertos[anio] });
   const toggleMesDash = (key: string) => setMesesDashAbiertos({ ...mesesDashAbiertos, [key]: !mesesDashAbiertos[key] });
 
-  const tiposConteoDash = useMemo(() => {
-    return listaTrabajosParaDashboard.reduce((acc: any, t: any) => {
-      const tp = (t.tipo || "Otro").trim().toUpperCase();
-      acc[tp] = (acc[tp] || 0) + 1;
-      return acc;
-    }, {});
-  }, [listaTrabajosParaDashboard]);
-
-  const tiposOrdenadosDash = Object.entries(tiposConteoDash).sort((a: any, b: any) => b[1] - a[1]);
-
   const anosDisponibles = useMemo(() => {
     return Array.from(new Set([
       ...trabajosFinalizados.map((t: any) => t.fecha_finalizacion ? t.fecha_finalizacion.substring(0, 4) : null)
@@ -487,7 +472,6 @@ export default function DashboardAgrimensura() {
     return "#eab308";
   };
 
-  // INICIALIZACIÓN DEL MAPA LEAFLET ESTABLE (CREA UNA SOLA VEZ Y ACTUALIZA MARCADORES SIN RESETEAR VISTA)
   useEffect(() => {
     if (activeTab !== "dashboard") return;
 
@@ -561,7 +545,6 @@ export default function DashboardAgrimensura() {
         <div className="flex flex-wrap justify-center lg:justify-end gap-2 w-full lg:w-auto">
           <button onClick={() => setActiveTab("trabajos")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "trabajos" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Expedientes</button>
           <button onClick={() => setActiveTab("dashboard")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "dashboard" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📊 Dashboard</button>
-          <button onClick={() => setActiveTab("mediciones")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "mediciones" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📏 Mediciones</button>
           <button onClick={() => setActiveTab("finanzas")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "finanzas" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Finanzas</button>
           <button onClick={() => setActiveTab("historial")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "historial" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Historial</button>
           <button onClick={() => setActiveTab("catastro")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 ${activeTab === "catastro" ? "bg-white text-[#1A1A1A] shadow-md" : "bg-[#222222] text-[#727A4E] hover:bg-[#333] border border-[#727A4E]/30"}`}>🔑 SCIT</button>
@@ -571,7 +554,6 @@ export default function DashboardAgrimensura() {
       {/* PESTAÑA: DASHBOARD & MAPA */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
-          
           <div className="bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <h2 className="text-lg md:text-xl font-black tracking-widest text-white uppercase">Panel de Estadísticas y Rendimiento</h2>
             
@@ -693,6 +675,7 @@ export default function DashboardAgrimensura() {
                                           <th className="p-3 w-24">Tipo</th>
                                           <th className="p-3">Propietario</th>
                                           <th className="p-3">Socio</th>
+                                          <th className="p-3">Ubicación</th>
                                           <th className="p-3">Fecha Finalización</th>
                                           <th className="p-3 w-16 text-center">Editar</th>
                                         </tr>
@@ -703,6 +686,7 @@ export default function DashboardAgrimensura() {
                                             <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
                                             <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
                                             <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
+                                            <td className="p-3 text-zinc-400">{t.ubicacion || (t.lat ? `${t.lat}, ${t.lng}` : '-')}</td>
                                             <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
                                             <td className="p-3 text-center">
                                               <button onClick={() => setTrabajoEditandoDash({ ...t })} className="text-sm bg-[#222] hover:bg-[#333] border border-zinc-700 px-2 py-1 rounded text-white" title="Editar Expediente">✏️</button>
@@ -752,7 +736,7 @@ export default function DashboardAgrimensura() {
             </div>
 
             <div>
-              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Fecha de Finalización (Año / Mes / Día)</label>
+              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Fecha de Finalización</label>
               <input type="date" className="w-full bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs cursor-pointer" value={trabajoEditandoDash.fecha_finalizacion ? trabajoEditandoDash.fecha_finalizacion.substring(0,10) : ""} onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, fecha_finalizacion: e.target.value})} required />
             </div>
 
@@ -774,17 +758,73 @@ export default function DashboardAgrimensura() {
 
           {subTabTrabajos === "activos" && (
             <>
-              <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col lg:flex-row lg:items-end gap-4 border border-zinc-800">
-                <div className="w-full lg:w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.tipo} onChange={e => setNuevoTrabajo({...nuevoTrabajo, tipo: e.target.value})} placeholder="Ej: M"/></div>
-                <div className="w-full lg:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.propietario} onChange={e => setNuevoTrabajo({...nuevoTrabajo, propietario: e.target.value})} placeholder="Ej: Juan Perez"/></div>
-                <div className="w-full lg:flex-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas (Opcional)</label><input ref={notasInputRef} className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/></div>
-                <div className="flex gap-4 w-full lg:w-auto">
-                  <div className="w-full lg:w-32"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Encargado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select></div>
-                  <div className="w-full lg:w-48"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Estado</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Ingresado</option><option value="amarillo">Pendiente</option></select></div>
+              {/* FORMULARIO DE CARGA DE EXPEDIENTE CON UBICACIÓN */}
+              <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label>
+                    <input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.tipo} onChange={e => setNuevoTrabajo({...nuevoTrabajo, tipo: e.target.value})} placeholder="Ej: VEP"/>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label>
+                    <input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.propietario} onChange={e => setNuevoTrabajo({...nuevoTrabajo, propietario: e.target.value})} placeholder="Ej: Juan Perez"/>
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Encargado</label>
+                    <select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.encargado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, encargado: e.target.value})}><option>Leo</option><option>Bruno</option></select>
+                  </div>
                 </div>
-                <div className="flex gap-2 w-full lg:w-auto mt-2 lg:mt-0">
-                  <button type="submit" className={`flex-1 lg:flex-none px-6 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar" : "Agregar"}</button>
-                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo" });}} className="flex-1 lg:flex-none px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Notas / Estado (Opcional)</label>
+                    <input ref={notasInputRef} className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.estado} onChange={e => setNuevoTrabajo({...nuevoTrabajo, estado: e.target.value})} placeholder="Ej: Esperando firma"/>
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Estado de Alerta</label>
+                    <select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.color} onChange={e => setNuevoTrabajo({...nuevoTrabajo, color: e.target.value})}><option value="verde">Ingresado</option><option value="amarillo">Pendiente</option></select>
+                  </div>
+                </div>
+
+                {/* UBICACIÓN Y BUSCADOR TIPO GOOGLE MAPS */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Calle y altura en Santa Fe / Santo Tomé o coordenadas)</label>
+                    <button type="button" onClick={() => setNuevoTrabajo({...nuevoTrabajo, modoCoordenadas: !nuevoTrabajo.modoCoordenadas})} className="text-[10px] text-zinc-400 hover:text-white underline">
+                      {nuevoTrabajo.modoCoordenadas ? "🔍 Usar Buscador de Direcciones" : "📌 Ingresar Lat / Lng Manual"}
+                    </button>
+                  </div>
+
+                  {!nuevoTrabajo.modoCoordenadas ? (
+                    <div>
+                      <input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.ubicacion} onChange={e => buscarDireccionNominatim(e.target.value)} placeholder="Ej: San Martin 2314, Santa Fe..."/>
+                      {sugerenciasDireccion.length > 0 && (
+                        <div className="absolute left-0 right-0 bg-[#222] border border-zinc-700 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                          {sugerenciasDireccion.map((item: any, idx: number) => (
+                            <div key={idx} onClick={() => seleccionarSugerencia(item)} className="p-2.5 text-xs text-zinc-300 hover:bg-[#333] cursor-pointer border-b border-zinc-800 last:border-0">
+                              📍 {item.display_name}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#222] p-4 rounded-lg border border-zinc-700">
+                      <div>
+                        <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Latitud (ej: -31.6333)</label>
+                        <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevoTrabajo.lat} onChange={e => setNuevoTrabajo({...nuevoTrabajo, lat: e.target.value})} placeholder="-31.6333"/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Longitud (ej: -60.7000)</label>
+                        <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevoTrabajo.lng} onChange={e => setNuevoTrabajo({...nuevoTrabajo, lng: e.target.value})} placeholder="-60.7000"/>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 mt-2">
+                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
+                  <button type="submit" className={`px-8 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar Cambios" : "Agregar Expediente"}</button>
                 </div>
               </form>
 
@@ -798,7 +838,7 @@ export default function DashboardAgrimensura() {
                   
                   {leoAbierto && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[600px]">
+                      <table className="w-full text-left border-collapse min-w-[700px]">
                         <tbody>
                           {trabajosLeo.map((t: any) => (
                             <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
@@ -807,11 +847,13 @@ export default function DashboardAgrimensura() {
                                   {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
                                 </div>
                                 <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
+                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
                               </td>
                               <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                               <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
+                                <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-xs tracking-wider font-bold uppercase" title="Agendar Medición en Google Calendar">📅 Calendar</a>
                                 <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
-                                <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
+                                <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado y enviar al mapa">✅</button>
                                 <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
                               </td>
                             </tr>
@@ -830,7 +872,7 @@ export default function DashboardAgrimensura() {
                   
                   {brunoAbierto && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[600px]">
+                      <table className="w-full text-left border-collapse min-w-[700px]">
                         <tbody>
                           {trabajosBruno.map((t: any) => (
                             <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
@@ -839,11 +881,13 @@ export default function DashboardAgrimensura() {
                                   {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
                                 </div>
                                 <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
+                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
                               </td>
                               <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                               <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
+                                <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-xs tracking-wider font-bold uppercase" title="Agendar Medición en Google Calendar">📅 Calendar</a>
                                 <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Editar Expediente">✏️</button>
-                                <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado">✅</button>
+                                <button onClick={() => finalizarTrabajo(t)} className="text-xl opacity-40 hover:opacity-100 transition-all" title="Marcar como Finalizado y enviar al mapa">✅</button>
                                 <button onClick={() => eliminarTrabajo(t.id)} className="text-xl opacity-40 hover:opacity-100 hover:text-red-500 transition-all" title="Eliminar definitivamente">🗑️</button>
                               </td>
                             </tr>
@@ -931,6 +975,7 @@ export default function DashboardAgrimensura() {
                                             <th className="p-3 w-24">Tipo</th>
                                             <th className="p-3">Propietario</th>
                                             <th className="p-3">Encomienda</th>
+                                            <th className="p-3">Ubicación</th>
                                             <th className="p-3">Fecha Finalización</th>
                                             <th className="p-3 w-12 text-center">Acción</th>
                                           </tr>
@@ -941,6 +986,7 @@ export default function DashboardAgrimensura() {
                                               <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
                                               <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
                                               <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
+                                              <td className="p-3 text-zinc-400">{t.ubicacion || (t.lat ? `${t.lat}, ${t.lng}` : '-')}</td>
                                               <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
                                               <td className="p-3 text-center"><button onClick={() => eliminarTrabajo(t.id)} title="Eliminar definitivamente" className="text-sm opacity-30 hover:opacity-100 hover:text-red-500 transition-all">🗑️</button></td>
                                             </tr>
@@ -961,94 +1007,6 @@ export default function DashboardAgrimensura() {
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {activeTab === "mediciones" && (
-        <div className="space-y-8">
-           <form onSubmit={guardarMedicion} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Expediente / Propietario</label>
-                <input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaMedicion.titulo} onChange={e => setNuevaMedicion({...nuevaMedicion, titulo: e.target.value})} placeholder="Ej: PH DELTA"/>
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Fecha</label>
-                <input type="date" required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] cursor-pointer" value={nuevaMedicion.fecha} onChange={e => setNuevaMedicion({...nuevaMedicion, fecha: e.target.value})} onClick={(e: any) => e.target.showPicker && e.target.showPicker()}/>
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Hora</label>
-                <select required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E] cursor-pointer" value={nuevaMedicion.hora} onChange={e => setNuevaMedicion({...nuevaMedicion, hora: e.target.value})}>
-                  {Array.from({ length: 28 }).map((_, i) => { const h = Math.floor(i / 2) + 7; const m = i % 2 === 0 ? "00" : "30"; const hStr = `${h.toString().padStart(2, '0')}:${m}`; return <option key={hStr} value={hStr}>{hStr} hs</option>; })}
-                </select>
-              </div>
-            </div>
-
-            <div className="relative">
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Dirección o Zona)</label>
-                <button type="button" onClick={() => setNuevaMedicion({...nuevaMedicion, modoCoordenadas: !nuevaMedicion.modoCoordenadas})} className="text-[10px] text-zinc-400 hover:text-white underline">
-                  {nuevaMedicion.modoCoordenadas ? "🔍 Volver a Buscar Dirección" : "📌 Es un Campo / Ingresar Coordenadas"}
-                </button>
-              </div>
-
-              {!nuevaMedicion.modoCoordenadas ? (
-                <div>
-                  <input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaMedicion.ubicacion} onChange={e => buscarDireccionNominatim(e.target.value)} placeholder="Ej: San Martin 2314, Santa Fe..."/>
-                  {sugerenciasDireccion.length > 0 && (
-                    <div className="absolute left-0 right-0 bg-[#222] border border-zinc-700 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-                      {sugerenciasDireccion.map((item: any, idx: number) => (
-                        <div key={idx} onClick={() => seleccionarSugerencia(item)} className="p-2.5 text-xs text-zinc-300 hover:bg-[#333] cursor-pointer border-b border-zinc-800 last:border-0">
-                          📍 {item.display_name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#222] p-4 rounded-lg border border-zinc-700">
-                  <div>
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Latitud (ej: -31.6333)</label>
-                    <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevaMedicion.lat} onChange={e => setNuevaMedicion({...nuevaMedicion, lat: e.target.value})} placeholder="-31.6333"/>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Longitud (ej: -60.7000)</label>
-                    <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevaMedicion.lng} onChange={e => setNuevaMedicion({...nuevaMedicion, lng: e.target.value})} placeholder="-60.7000"/>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end mt-2">
-              <button type="submit" className="px-8 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors bg-[#727A4E] hover:bg-[#8B9461]">AGENDAR MEDICIÓN</button>
-            </div>
-          </form>
-
-          <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-            <div className="bg-[#222222] p-4 border-b border-zinc-800"><h3 className="font-bold text-white tracking-widest uppercase text-sm">Próximas Mediciones</h3></div>
-            {mediciones.length === 0 ? ( <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase">No hay mediciones pendientes</p> ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead><tr className="bg-[#111111] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Expediente</th><th className="p-4">Fecha</th><th className="p-4">Hora</th><th className="p-4">Ubicación</th><th className="p-4">Acciones</th></tr></thead>
-                  <tbody>
-                    {mediciones.map((m: any) => {
-                      const [anio, mes, dia] = m.fecha.split("-");
-                      return (
-                        <tr key={m.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A]">
-                          <td className="p-4 font-bold text-zinc-200">{m.titulo}</td><td className="p-4 text-white font-bold">{`${dia}/${mes}/${anio}`}</td><td className="p-4 text-zinc-300">{m.hora} hs</td><td className="p-4 text-zinc-400">{m.ubicacion || (m.lat ? `Coordenadas: ${m.lat}, ${m.lng}` : "-")}</td>
-                          <td className="p-4 flex gap-3 items-center">
-                            <a href={generarLinkCalendar(m)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-3 py-1.5 rounded text-xs tracking-wider font-bold uppercase">📅 Calendar</a>
-                            <button onClick={() => completarMedicion(m.id)} className="bg-[#727A4E]/20 hover:bg-[#727A4E]/40 text-[#A4B070] border border-[#727A4E]/50 px-3 py-1.5 rounded text-xs tracking-wider font-bold uppercase">✅ Listo</button>
-                            <button onClick={() => borrarMedicion(m.id)} className="text-lg opacity-40 hover:opacity-100 hover:text-red-500">🗑️</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
