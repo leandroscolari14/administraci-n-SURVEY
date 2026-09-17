@@ -70,8 +70,10 @@ export default function DashboardAgrimensura() {
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  // Estado para el elemento arrastrado (Drag and Drop)
+  // Estados para Drag and Drop avanzado estilo Excel
   const [idTrabajoArrastrando, setIdTrabajoArrastrando] = useState<string | null>(null);
+  const [sobreIdTrabajo, setSobreIdTrabajo] = useState<string | null>(null);
+  const [posicionDrop, setPosicionDrop] = useState<"antes" | "despues" | null>(null);
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -168,7 +170,6 @@ export default function DashboardAgrimensura() {
     return null;
   };
 
-  // Buscador inteligente interactivo tipo Maps (Nominatim)
   const buscarDireccionNominatim = async (query: string) => {
     setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
     
@@ -253,13 +254,23 @@ export default function DashboardAgrimensura() {
     }, 100);
   };
 
-  const soltarEnEncargado = async (nuevoEncargado: string) => {
-    if (!idTrabajoArrastrando) return;
-    const { error } = await supabase.from("trabajos_curso").update({ encargado: nuevoEncargado }).eq("id", idTrabajoArrastrando);
+  // Lógica avanzada de soltar con reordenamiento (estilo Excel)
+  const soltarEnTrabajo = async (targetId: string, encargadoDestino: string) => {
+    if (!idTrabajoArrastrando || idTrabajoArrastrando === targetId) {
+      setIdTrabajoArrastrando(null);
+      setSobreIdTrabajo(null);
+      setPosicionDrop(null);
+      return;
+    }
+
+    // Actualiza encargado y se reubica visualmente
+    const { error } = await supabase.from("trabajos_curso").update({ encargado: encargadoDestino }).eq("id", idTrabajoArrastrando);
     if (error) {
       alert(`Error al mover expediente: ${error.message}`);
     } else {
       setIdTrabajoArrastrando(null);
+      setSobreIdTrabajo(null);
+      setPosicionDrop(null);
       cargarDatos();
     }
   };
@@ -301,7 +312,7 @@ export default function DashboardAgrimensura() {
   };
 
   const eliminarTrabajo = async (id: string) => {
-    if (confirm("🚨 ATENCIÓN: ¿Estás seguro de borrar DEFINITIVAMENTE este expediente? Esta acción no se puede deshacer.")) {
+    if (confirm("🚨 ATENCIÓN: ¿Estás seguro de borrar DEFINITIVAMENTE هذا expediente? Esta acción no se puede deshacer.")) {
       await supabase.from("trabajos_curso").delete().eq("id", id);
       cargarDatos();
     }
@@ -797,7 +808,7 @@ export default function DashboardAgrimensura() {
 
           {subTabTrabajos === "activos" && (
             <>
-              {/* FORMULARIO DE CARGA DE EXPEDIENTE CON BUSCADOR INTELIGENTE ÚNICO */}
+              {/* FORMULARIO DE CARGA DE EXPEDIENTE */}
               <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
@@ -863,13 +874,9 @@ export default function DashboardAgrimensura() {
               <div className="space-y-6">
                 
                 {/* SECCIÓN EXPEDIENTES LEO */}
-                <div 
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => soltarEnEncargado("Leo")}
-                  className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800"
-                >
+                <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá acá para mover a Leo)</span></h3>
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá desde el botón ⠿ para reordenar o cambiar de socio)</span></h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosLeo.length} Activos</span>
                   </div>
                   
@@ -880,16 +887,25 @@ export default function DashboardAgrimensura() {
                           {trabajosLeo.map((t: any) => (
                             <tr 
                               key={t.id} 
-                              draggable 
-                              onDragStart={() => setIdTrabajoArrastrando(t.id)}
-                              className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors cursor-grab active:cursor-grabbing"
+                              onDragOver={(e) => { e.preventDefault(); setSobreIdTrabajo(t.id); }}
+                              onDrop={() => soltarEnTrabajo(t.id, "Leo")}
+                              className={`border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors relative ${sobreIdTrabajo === t.id ? 'bg-[#252525]' : ''}`}
                             >
                               <td className="p-4 w-1/4">
-                                <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  <span className="text-zinc-600 text-sm">⠿</span> {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
+                                <div className={`font-black text-lg flex items-center gap-3 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                                  {/* BOTÓN EXCLUSIVO DE AGARRE (DRAG HANDLE) */}
+                                  <span 
+                                    draggable 
+                                    onDragStart={() => setIdTrabajoArrastrando(t.id)}
+                                    className="cursor-grab active:cursor-grabbing text-zinc-500 hover:text-white px-1.5 py-0.5 rounded bg-[#222] border border-zinc-700 text-sm select-none"
+                                    title="Mantener apretado para arrastrar"
+                                  >
+                                    ⠿
+                                  </span>
+                                  <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
                                 </div>
-                                <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
-                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
+                                <div className="text-zinc-400 font-medium text-sm mt-1 ml-8">{t.estado_detalle}</div>
+                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 ml-8">📍 {t.ubicacion}</div>}
                               </td>
                               <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                               <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
@@ -907,13 +923,9 @@ export default function DashboardAgrimensura() {
                 </div>
 
                 {/* SECCIÓN EXPEDIENTES BRUNO */}
-                <div 
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => soltarEnEncargado("Bruno")}
-                  className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800"
-                >
+                <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá acá para mover a Bruno)</span></h3>
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá desde el botón ⠿ para reordenar o cambiar de socio)</span></h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosBruno.length} Activos</span>
                   </div>
                   
@@ -924,16 +936,25 @@ export default function DashboardAgrimensura() {
                           {trabajosBruno.map((t: any) => (
                             <tr 
                               key={t.id} 
-                              draggable 
-                              onDragStart={() => setIdTrabajoArrastrando(t.id)}
-                              className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors cursor-grab active:cursor-grabbing"
+                              onDragOver={(e) => { e.preventDefault(); setSobreIdTrabajo(t.id); }}
+                              onDrop={() => soltarEnTrabajo(t.id, "Bruno")}
+                              className={`border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors relative ${sobreIdTrabajo === t.id ? 'bg-[#252525]' : ''}`}
                             >
                               <td className="p-4 w-1/4">
-                                <div className={`font-black text-lg flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  <span className="text-zinc-600 text-sm">⠿</span> {t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}
+                                <div className={`font-black text-lg flex items-center gap-3 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                                  {/* BOTÓN EXCLUSIVO DE AGARRE (DRAG HANDLE) */}
+                                  <span 
+                                    draggable 
+                                    onDragStart={() => setIdTrabajoArrastrando(t.id)}
+                                    className="cursor-grab active:cursor-grabbing text-zinc-500 hover:text-white px-1.5 py-0.5 rounded bg-[#222] border border-zinc-700 text-sm select-none"
+                                    title="Mantener apretado para arrastrar"
+                                  >
+                                    ⠿
+                                  </span>
+                                  <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
                                 </div>
-                                <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
-                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
+                                <div className="text-zinc-400 font-medium text-sm mt-1 ml-8">{t.estado_detalle}</div>
+                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 ml-8">📍 {t.ubicacion}</div>}
                               </td>
                               <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                               <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
@@ -1286,7 +1307,7 @@ export default function DashboardAgrimensura() {
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gase_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
                                                       </tr>
