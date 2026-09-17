@@ -47,8 +47,7 @@ export default function DashboardAgrimensura() {
     encargado: "Leo",
     ubicacion: "",
     lat: "",
-    lng: "",
-    modoCoordenadas: false
+    lng: ""
   });
   const [sugerenciasDireccion, setSugerenciasDireccion] = useState<any[]>([]);
 
@@ -93,8 +92,7 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    const { data: dataTrabajos, error: errorTrabajos } = await supabase.from("trabajos_curso").select("*");
-    
+    const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*");
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true);
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
@@ -102,7 +100,6 @@ export default function DashboardAgrimensura() {
     if (dataTrabajos) {
       const activos = dataTrabajos.filter((t: any) => t.finalizado === false || t.finalizado === null);
       const finalizados = dataTrabajos.filter((t: any) => t.finalizado === true);
-      
       setTrabajosActivos(activos);
       setTrabajosFinalizados(finalizados);
     }
@@ -171,20 +168,22 @@ export default function DashboardAgrimensura() {
     return null;
   };
 
+  // Buscador inteligente interactivo tipo Maps (Nominatim)
   const buscarDireccionNominatim = async (query: string) => {
+    setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
+    
     const coordsDetectadas = parsearCoordenadasPegadas(query);
     if (coordsDetectadas) {
-      setNuevoTrabajo({ 
-        ...nuevoTrabajo, 
+      setNuevoTrabajo(prev => ({ 
+        ...prev, 
         ubicacion: query, 
         lat: coordsDetectadas.lat, 
         lng: coordsDetectadas.lng 
-      });
+      }));
       setSugerenciasDireccion([]);
       return;
     }
 
-    setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
     if (query.length < 3) { setSugerenciasDireccion([]); return; }
     try {
       const queryConCiudad = `${query}, Santa Fe, Argentina`;
@@ -229,7 +228,7 @@ export default function DashboardAgrimensura() {
       if (error) { alert(`Error al guardar: ${error.message}`); return; }
     }
     
-    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });
+    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" });
     cargarDatos();
   };
 
@@ -243,8 +242,7 @@ export default function DashboardAgrimensura() {
       encargado: t.encargado || "Leo",
       ubicacion: t.ubicacion || "",
       lat: t.lat ? String(t.lat) : "",
-      lng: t.lng ? String(t.lng) : "",
-      modoCoordenadas: false
+      lng: t.lng ? String(t.lng) : ""
     });
     if (t.encargado === "Leo") setLeoAbierto(true);
     if (t.encargado === "Bruno") setBrunoAbierto(true);
@@ -255,7 +253,6 @@ export default function DashboardAgrimensura() {
     }, 100);
   };
 
-  // Función para soltar y cambiar de encargado al arrastrar
   const soltarEnEncargado = async (nuevoEncargado: string) => {
     if (!idTrabajoArrastrando) return;
     const { error } = await supabase.from("trabajos_curso").update({ encargado: nuevoEncargado }).eq("id", idTrabajoArrastrando);
@@ -800,7 +797,7 @@ export default function DashboardAgrimensura() {
 
           {subTabTrabajos === "activos" && (
             <>
-              {/* FORMULARIO DE CARGA DE EXPEDIENTE CON UBICACIÓN */}
+              {/* FORMULARIO DE CARGA DE EXPEDIENTE CON BUSCADOR INTELIGENTE ÚNICO */}
               <form onSubmit={guardarTrabajo} className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg flex flex-col gap-4 border border-zinc-800">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
@@ -828,51 +825,44 @@ export default function DashboardAgrimensura() {
                   </div>
                 </div>
 
-                {/* UBICACIÓN Y BUSCADOR TIPO GOOGLE MAPS */}
+                {/* BUSCADOR INTELIGENTE TIPO MAPS */}
                 <div className="relative">
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Ubicación (Dirección o pegá lat,lng directo de Maps)</label>
-                    <button type="button" onClick={() => setNuevoTrabajo({...nuevoTrabajo, modoCoordenadas: !nuevoTrabajo.modoCoordenadas})} className="text-[10px] text-zinc-400 hover:text-white underline">
-                      {nuevoTrabajo.modoCoordenadas ? "🔍 Usar Buscador de Direcciones" : "📌 Ingresar Lat / Lng Separadas"}
-                    </button>
+                  <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E] block mb-1">Ubicación (Buscador inteligente o pegá coordenadas ej: -31.63, -60.70)</label>
+                  <div className="relative">
+                    <input 
+                      className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 pr-10 rounded focus:outline-none focus:border-[#727A4E]" 
+                      value={nuevoTrabajo.ubicacion} 
+                      onChange={e => buscarDireccionNominatim(e.target.value)} 
+                      placeholder="Ej: J. P. López 850, Santa Fe..."
+                    />
+                    <span className="absolute right-3 top-3.5 text-zinc-500 pointer-events-none">🔍</span>
                   </div>
 
-                  {!nuevoTrabajo.modoCoordenadas ? (
-                    <div>
-                      <input className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevoTrabajo.ubicacion} onChange={e => buscarDireccionNominatim(e.target.value)} placeholder="Ej: San Martin 2314, Santa Fe o -31.63, -60.70..."/>
-                      {sugerenciasDireccion.length > 0 && (
-                        <div className="absolute left-0 right-0 bg-[#222] border border-zinc-700 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-                          {sugerenciasDireccion.map((item: any, idx: number) => (
-                            <div key={idx} onClick={() => seleccionarSugerencia(item)} className="p-2.5 text-xs text-zinc-300 hover:bg-[#333] cursor-pointer border-b border-zinc-800 last:border-0">
-                              📍 {item.display_name}
-                            </div>
-                          ))}
+                  {sugerenciasDireccion.length > 0 && (
+                    <div className="absolute left-0 right-0 bg-[#1D1D1D] border border-zinc-700 rounded-b-xl shadow-2xl z-50 max-h-56 overflow-y-auto mt-1 divide-y divide-zinc-800">
+                      {sugerenciasDireccion.map((item: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          onClick={() => seleccionarSugerencia(item)} 
+                          className="p-3 text-xs text-zinc-300 hover:bg-[#2A2A2A] cursor-pointer flex items-center gap-2.5 transition-colors"
+                        >
+                          <span className="text-base">📍</span>
+                          <span className="font-medium line-clamp-1">{item.display_name}</span>
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#222] p-4 rounded-lg border border-zinc-700">
-                      <div>
-                        <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Latitud (ej: -31.6333)</label>
-                        <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevoTrabajo.lat} onChange={e => setNuevoTrabajo({...nuevoTrabajo, lat: e.target.value})} placeholder="-31.6333"/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-zinc-400 uppercase font-bold block mb-1">Longitud (ej: -60.7000)</label>
-                        <input type="text" className="w-full bg-[#111] border border-zinc-700 text-white p-2 rounded text-xs" value={nuevoTrabajo.lng} onChange={e => setNuevoTrabajo({...nuevoTrabajo, lng: e.target.value})} placeholder="-60.7000"/>
-                      </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
                 <div className="flex justify-end gap-2 mt-2">
-                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "", modoCoordenadas: false });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
+                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
                   <button type="submit" className={`px-8 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar Cambios" : "Agregar Expediente"}</button>
                 </div>
               </form>
 
               <div className="space-y-6">
                 
-                {/* SECCIÓN EXPEDIENTES LEO (Permite soltar elementos arrastrados) */}
+                {/* SECCIÓN EXPEDIENTES LEO */}
                 <div 
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => soltarEnEncargado("Leo")}
@@ -916,7 +906,7 @@ export default function DashboardAgrimensura() {
                   )}
                 </div>
 
-                {/* SECCIÓN EXPEDIENTES BRUNO (Permite soltar elementos arrastrados) */}
+                {/* SECCIÓN EXPEDIENTES BRUNO */}
                 <div 
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => soltarEnEncargado("Bruno")}
@@ -1138,7 +1128,7 @@ export default function DashboardAgrimensura() {
                 <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioLeoTotal)}</span></p>
                 <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosLeo)}</span></p>
                 <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                  {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formateArPlata(Math.abs(resumenActual.balanceLeo))}`}
+                  {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceLeo))}`}
                 </p>
               </div>
               <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
@@ -1296,7 +1286,7 @@ export default function DashboardAgrimensura() {
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gase_5050 ? h.caja : h.ingreso_total)}</td>
+                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
                                                       </tr>
