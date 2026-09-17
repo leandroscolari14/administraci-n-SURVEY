@@ -92,16 +92,18 @@ export default function DashboardAgrimensura() {
   const cargarDatos = async () => {
     const { data: dataTrabajos, error: errorTrabajos } = await supabase.from("trabajos_curso").select("*");
     
-    console.log("DATOS CRUDOS DE SUPABASE:", dataTrabajos);
-    console.log("ERROR DE SUPABASE:", errorTrabajos);
+    if (errorTrabajos) {
+      console.error("Error Supabase:", errorTrabajos);
+    }
 
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true);
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
     if (dataTrabajos) {
-      setTrabajosActivos(dataTrabajos); // TODO A ACTIVO PARA VER SI AL MENOS MUESTRA LOS 660
-      setTrabajosFinalizados(dataTrabajos);
+      // Fuerza a mostrar los 660 registros como activos para que veas todo de una vez
+      setTrabajosActivos(dataTrabajos);
+      setTrabajosFinalizados([]);
     }
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
