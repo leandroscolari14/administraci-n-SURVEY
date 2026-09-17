@@ -90,17 +90,18 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    const { data: dataTrabajos, error } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
+    const { data: dataTrabajos, error: errorTrabajos } = await supabase.from("trabajos_curso").select("*").order("fecha_actualizacion", { ascending: false });
+    
+    if (errorTrabajos) {
+      alert(`⚠️ Error al cargar la base de datos: ${errorTrabajos.message}`);
+      console.error("Error Supabase:", errorTrabajos);
+    }
+
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false).order("fecha_carga", { ascending: false });
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true).order("fecha_liquidacion", { ascending: false });
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
     
-    if (error) {
-      console.error("Error al cargar trabajos:", error.message);
-    }
-
     if (dataTrabajos) {
-      // Consideramos activo si finalizado es falsy (false, null o undefined)
       setTrabajosActivos(dataTrabajos.filter((t: any) => !t.finalizado));
       setTrabajosFinalizados(dataTrabajos.filter((t: any) => t.finalizado === true));
     }
@@ -193,7 +194,6 @@ export default function DashboardAgrimensura() {
       finalizado: false
     };
 
-    // Solo mandamos ubicación y coordenadas si tienen texto para evitar errores de esquema
     if (nuevoTrabajo.ubicacion) datosGuardar.ubicacion = nuevoTrabajo.ubicacion;
     if (nuevoTrabajo.lat) datosGuardar.lat = Number(nuevoTrabajo.lat);
     if (nuevoTrabajo.lng) datosGuardar.lng = Number(nuevoTrabajo.lng);
