@@ -565,13 +565,30 @@ export default function DashboardAgrimensura() {
       if (!L || !mapContainerRef.current) return;
 
       if (!mapInstanceRef.current) {
-        const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12);
-        mapInstanceRef.current = map;
-
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        // Capas base: OpenStreetMap y Satélite (Esri World Imagery)
+        const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
+        });
+
+        const sateliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        });
+
+        const map = L.map(mapContainerRef.current, {
+          center: [-31.6333, -60.7000],
+          zoom: 12,
+          layers: [osmLayer] // Capa por defecto
+        });
+        mapInstanceRef.current = map;
+
+        const baseMaps = {
+          "🗺️ Calles (OSM)": osmLayer,
+          "🛰️ Satélite": sateliteLayer
+        };
+
+        L.control.layers(baseMaps).addTo(map);
 
         markersLayerRef.current = L.layerGroup().addTo(map);
       }
@@ -694,7 +711,7 @@ export default function DashboardAgrimensura() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
               <div>
                 <h3 className="font-bold text-white tracking-widest uppercase text-sm">🗺️ Mapa de Trabajos Realizados</h3>
-                <p className="text-xs text-zinc-400">Pines diferenciados por color según el tipo de trámite.</p>
+                <p className="text-xs text-zinc-400">Pines diferenciados por color. Podés alternar entre Calles y Satélite arriba a la derecha.</p>
               </div>
               <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase">
                 <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> VEP</span>
