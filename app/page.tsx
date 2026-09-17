@@ -391,6 +391,17 @@ export default function DashboardAgrimensura() {
     return acc;
   }, {});
 
+  // Ordenar alfabéticamente los trabajos de cada mes por propietario
+  Object.keys(trabajosPorAnioYMes).forEach(anio => {
+    Object.keys(trabajosPorAnioYMes[anio]).forEach(mesNum => {
+      trabajosPorAnioYMes[anio][mesNum].sort((a: any, b: any) => {
+        const propA = (a.propietario || a.nombre_expediente || "").toLowerCase();
+        const propB = (b.propietario || b.nombre_expediente || "").toLowerCase();
+        return propA.localeCompare(propB);
+      });
+    });
+  });
+
   const aniosOrdenados = Object.keys(trabajosPorAnioYMes).sort((a, b) => b.localeCompare(a));
   const toggleAnio = (anio: string) => setAniosAbiertos({ ...aniosAbiertos, [anio]: !aniosAbiertos[anio] });
   const toggleMes = (key: string) => setMesesAbiertos({ ...mesesAbiertos, [key]: !mesesAbiertos[key] });
@@ -413,6 +424,19 @@ export default function DashboardAgrimensura() {
     acc[anio][mesNum][semanaKey].push(item);
     return acc;
   }, {});
+
+  // Ordenar alfabéticamente los registros de finanzas en cada bloque de historial por propietario/tipo
+  Object.keys(historialAgrupado).forEach(anio => {
+    Object.keys(historialAgrupado[anio]).forEach(mesNum => {
+      Object.keys(historialAgrupado[anio][mesNum]).forEach(semanaKey => {
+        historialAgrupado[anio][mesNum][semanaKey].sort((a: any, b: any) => {
+          const propA = (a.propietario || a.tipo_tramite || "").toLowerCase();
+          const propB = (b.propietario || b.tipo_tramite || "").toLowerCase();
+          return propA.localeCompare(propB);
+        });
+      });
+    });
+  });
 
   const aniosFinanzasOrdenados = Object.keys(historialAgrupado).sort((a, b) => {
     if (a === "Sin Fecha") return 1;
