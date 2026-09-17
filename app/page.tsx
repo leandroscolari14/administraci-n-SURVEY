@@ -70,11 +70,6 @@ export default function DashboardAgrimensura() {
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  // Estados para Drag and Drop avanzado estilo Excel
-  const [idTrabajoArrastrando, setIdTrabajoArrastrando] = useState<string | null>(null);
-  const [sobreIdTrabajo, setSobreIdTrabajo] = useState<string | null>(null);
-  const [posicionDrop, setPosicionDrop] = useState<"antes" | "despues" | null>(null);
-
   useEffect(() => { cargarDatos(); }, []);
 
   useEffect(() => {
@@ -94,7 +89,8 @@ export default function DashboardAgrimensura() {
   }, [catastro]);
 
   const cargarDatos = async () => {
-    const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*");
+    // Ordenamos estrictamente por ID ascendente para mantener la posición fija siempre
+    const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("id", { ascending: true });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
     const { data: dataHistorial } = await supabase.from("finanzas").select("*").eq("liquidado", true);
     const { data: dataCatastro } = await supabase.from("estado_catastro").select("*").limit(1);
@@ -254,50 +250,13 @@ export default function DashboardAgrimensura() {
     }, 100);
   };
 
-  // Lógica avanzada de soltar con reordenamiento (estilo Excel)
-  const soltarEnTrabajo = async (targetId: string, encargadoDestino: string) => {
-    if (!idTrabajoArrastrando || idTrabajoArrastrando === targetId) {
-      setIdTrabajoArrastrando(null);
-      setSobreIdTrabajo(null);
-      setPosicionDrop(null);
-      return;
-    }
-
-    // Actualiza encargado y se reubica visualmente
-    const { error } = await supabase.from("trabajos_curso").update({ encargado: encargadoDestino }).eq("id", idTrabajoArrastrando);
-    if (error) {
-      alert(`Error al mover expediente: ${error.message}`);
-    } else {
-      setIdTrabajoArrastrando(null);
-      setSobreIdTrabajo(null);
-      setPosicionDrop(null);
-      cargarDatos();
-    }
-  };
-
-  const guardarEdicionRapidaDash = async (e: any) => {
-    e.preventDefault();
-    if (!trabajoEditandoDash) return;
-    
-    const { error } = await supabase.from("trabajos_curso").update({
-      tipo: trabajoEditandoDash.tipo,
-      propietario: trabajoEditandoDash.propietario,
-      nombre_expediente: `${trabajoEditandoDash.tipo} - ${trabajoEditandoDash.propietario}`,
-      encargado: trabajoEditandoDash.encargado,
-      fecha_finalizacion: trabajoEditandoDash.fecha_finalizacion
-    }).eq("id", trabajoEditandoDash.id);
-
-    if (error) {
-      alert(`Error al actualizar: ${error.message}`);
-    } else {
-      setTrabajoEditandoDash(null);
-      cargarDatos();
-    }
-  };
-
+  // Cambio clave: Actualización local instantánea del estado de la etapa SIN reordenar la lista
   const toggleEtapa = async (id: string, etapa: string, valorActual: boolean) => {
+    // 1. Actualizamos de manera optimista el estado local para que no salte ni mande al fondo nada
+    setTrabajosActivos(prev => prev.map(t => t.id === id ? { ...t, [etapa]: !valorActual } : t));
+    
+    // 2. Guardamos en segundo plano en Supabase
     await supabase.from("trabajos_curso").update({ [etapa]: !valorActual }).eq("id", id);
-    cargarDatos();
   };
 
   const finalizarTrabajo = async (t: any) => {
@@ -312,7 +271,7 @@ export default function DashboardAgrimensura() {
   };
 
   const eliminarTrabajo = async (id: string) => {
-    if (confirm("🚨 ATENCIÓN: ¿Estás seguro de borrar DEFINITIVAMENTE هذا expediente? Esta acción no se puede deshacer.")) {
+    if (confirm("🚨 ATENCIÓN: ¿Estás seguro de borrar DEFINITIVAMENTE este expediente? Esta acción no se puede deshacer.")) {
       await supabase.from("trabajos_curso").delete().eq("id", id);
       cargarDatos();
     }
@@ -876,7 +835,7 @@ export default function DashboardAgrimensura() {
                 {/* SECCIÓN EXPEDIENTES LEO */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá desde el botón ⠿ para reordenar o cambiar de socio)</span></h3>
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo</h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosLeo.length} Activos</span>
                   </div>
                   
@@ -885,27 +844,13 @@ export default function DashboardAgrimensura() {
                       <table className="w-full text-left border-collapse min-w-[700px]">
                         <tbody>
                           {trabajosLeo.map((t: any) => (
-                            <tr 
-                              key={t.id} 
-                              onDragOver={(e) => { e.preventDefault(); setSobreIdTrabajo(t.id); }}
-                              onDrop={() => soltarEnTrabajo(t.id, "Leo")}
-                              className={`border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors relative ${sobreIdTrabajo === t.id ? 'bg-[#252525]' : ''}`}
-                            >
+                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                               <td className="p-4 w-1/4">
                                 <div className={`font-black text-lg flex items-center gap-3 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  {/* BOTÓN EXCLUSIVO DE AGARRE (DRAG HANDLE) */}
-                                  <span 
-                                    draggable 
-                                    onDragStart={() => setIdTrabajoArrastrando(t.id)}
-                                    className="cursor-grab active:cursor-grabbing text-zinc-500 hover:text-white px-1.5 py-0.5 rounded bg-[#222] border border-zinc-700 text-sm select-none"
-                                    title="Mantener apretado para arrastrar"
-                                  >
-                                    ⠿
-                                  </span>
                                   <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
                                 </div>
-                                <div className="text-zinc-400 font-medium text-sm mt-1 ml-8">{t.estado_detalle}</div>
-                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 ml-8">📍 {t.ubicacion}</div>}
+                                <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
+                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
                               </td>
                               <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                               <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
@@ -925,7 +870,7 @@ export default function DashboardAgrimensura() {
                 {/* SECCIÓN EXPEDIENTES BRUNO */}
                 <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                   <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno <span className="text-[10px] text-zinc-500 font-normal">(Arrastrá desde el botón ⠿ para reordenar o cambiar de socio)</span></h3>
+                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno</h3>
                     <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosBruno.length} Activos</span>
                   </div>
                   
@@ -934,27 +879,13 @@ export default function DashboardAgrimensura() {
                       <table className="w-full text-left border-collapse min-w-[700px]">
                         <tbody>
                           {trabajosBruno.map((t: any) => (
-                            <tr 
-                              key={t.id} 
-                              onDragOver={(e) => { e.preventDefault(); setSobreIdTrabajo(t.id); }}
-                              onDrop={() => soltarEnTrabajo(t.id, "Bruno")}
-                              className={`border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors relative ${sobreIdTrabajo === t.id ? 'bg-[#252525]' : ''}`}
-                            >
+                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
                               <td className="p-4 w-1/4">
                                 <div className={`font-black text-lg flex items-center gap-3 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  {/* BOTÓN EXCLUSIVO DE AGARRE (DRAG HANDLE) */}
-                                  <span 
-                                    draggable 
-                                    onDragStart={() => setIdTrabajoArrastrando(t.id)}
-                                    className="cursor-grab active:cursor-grabbing text-zinc-500 hover:text-white px-1.5 py-0.5 rounded bg-[#222] border border-zinc-700 text-sm select-none"
-                                    title="Mantener apretado para arrastrar"
-                                  >
-                                    ⠿
-                                  </span>
                                   <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
                                 </div>
-                                <div className="text-zinc-400 font-medium text-sm mt-1 ml-8">{t.estado_detalle}</div>
-                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 ml-8">📍 {t.ubicacion}</div>}
+                                <div className="text-zinc-400 font-medium text-sm mt-1">{t.estado_detalle}</div>
+                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5">📍 {t.ubicacion}</div>}
                               </td>
                               <td className="p-4 w-2/4"><RenderEtapas t={t} /></td>
                               <td className="p-4 text-right flex gap-3 justify-end items-center h-full pt-6 w-1/4">
@@ -1307,7 +1238,7 @@ export default function DashboardAgrimensura() {
                                                         <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
                                                         <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                         <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gase_5050 ? h.caja : h.ingreso_total)}</td>
+                                                        <td className={`p-3 font-bold ${h.es_gase_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                         <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
                                                       </tr>
