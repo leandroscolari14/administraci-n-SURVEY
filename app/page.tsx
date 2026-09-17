@@ -53,6 +53,7 @@ export default function DashboardAgrimensura() {
 
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
+  const [trabajoResaltadoId, setTrabajoResaltadoId] = useState<string | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
   const [nuevaFinanza, setNuevaFinanza] = useState({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });
@@ -69,6 +70,7 @@ export default function DashboardAgrimensura() {
   const mapInstanceRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapMarkersMapRef = useRef<Map<string, any>>(new Map());
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -491,6 +493,17 @@ export default function DashboardAgrimensura() {
     }, {});
   }, [listaTrabajosParaDashboard]);
 
+  // Ordenar alfabéticamente los trabajos del dashboard por propietario
+  Object.keys(trabajosDashPorAnioYMes).forEach(anio => {
+    Object.keys(trabajosDashPorAnioYMes[anio]).forEach(mesNum => {
+      trabajosDashPorAnioYMes[anio][mesNum].sort((a: any, b: any) => {
+        const propA = (a.propietario || a.nombre_expediente || "").toLowerCase();
+        const propB = (b.propietario || b.nombre_expediente || "").toLowerCase();
+        return propA.localeCompare(propB);
+      });
+    });
+  });
+
   const aniosDashOrdenados = Object.keys(trabajosDashPorAnioYMes).sort((a, b) => b.localeCompare(a));
   const toggleAnioDash = (anio: string) => setAniosDashAbiertos({ ...aniosDashAbiertos, [anio]: !aniosDashAbiertos[anio] });
   const toggleMesDash = (key: string) => setMesesDashAbiertos({ ...mesesDashAbiertos, [key]: !mesesDashAbiertos[key] });
@@ -518,6 +531,22 @@ export default function DashboardAgrimensura() {
     if (tp.includes("SIMPLE")) return "#64748b";
     if (tp.includes("EXPROPIACION")) return "#ef4444";
     return "#eab308";
+  };
+
+  const centrarMapaEnTrabajo = (t: any) => {
+    if (!t.lat || !t.lng || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    map.setView([Number(t.lat), Number(t.lng)], 16, { animate: true });
+    
+    const marker = mapMarkersMapRef.current.get(t.id);
+    if (marker) {
+      marker.openPopup();
+    }
+
+    setTrabajoResaltadoId(t.id);
+    setTimeout(() => {
+      setTrabajoResaltadoId(null);
+    }, 2500);
   };
 
   useEffect(() => {
@@ -549,6 +578,7 @@ export default function DashboardAgrimensura() {
 
       if (markersLayerRef.current) {
         markersLayerRef.current.clearLayers();
+        mapMarkersMapRef.current.clear();
 
         listaTrabajosParaDashboard.forEach((t: any) => {
           if (t.lat && t.lng) {
@@ -563,6 +593,7 @@ export default function DashboardAgrimensura() {
             const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon });
             marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
             markersLayerRef.current.addLayer(marker);
+            mapMarkersMapRef.current.set(t.id, marker);
           }
         });
       }
@@ -717,7 +748,7 @@ export default function DashboardAgrimensura() {
 
                                 {mesesDashAbiertos[keyMesDash] && (
                                   <div className="overflow-x-auto">
-                                    <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+                                    <table className="w-full text-left whitespace-nowrap min-w-[650px]">
                                       <thead>
                                         <tr className="bg-[#1A1A1A] text-[#727A4E] font-bold uppercase text-[10px] tracking-wider border-b border-zinc-800">
                                           <th className="p-3 w-24">Tipo</th>
@@ -725,22 +756,36 @@ export default function DashboardAgrimensura() {
                                           <th className="p-3">Socio</th>
                                           <th className="p-3">Ubicación</th>
                                           <th className="p-3">Fecha Finalización</th>
+                                          <th className="p-3 w-24 text-center">Pin / Mapa</th>
                                           <th className="p-3 w-16 text-center">Editar</th>
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {listaMes.map((t: any) => (
-                                          <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] text-xs">
-                                            <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
-                                            <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
-                                            <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
-                                            <td className="p-3 text-zinc-400">{t.ubicacion || (t.lat ? `${t.lat}, ${t.lng}` : '-')}</td>
-                                            <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
-                                            <td className="p-3 text-center">
-                                              <button onClick={() => setTrabajoEditandoDash({ ...t })} className="text-sm bg-[#222] hover:bg-[#333] border border-zinc-700 px-2 py-1 rounded text-white" title="Editar Expediente">✏️</button>
-                                            </td>
-                                          </tr>
-                                        ))}
+                                        {listaMes.map((t: any) => {
+                                          const tieneCoordenadas = t.lat && t.lng;
+                                          const esResaltado = trabajoResaltadoId === t.id;
+                                          return (
+                                            <tr key={t.id} className={`border-b border-zinc-800 text-xs transition-colors ${esResaltado ? 'bg-[#727A4E]/30' : 'hover:bg-[#2A2A2A]'}`}>
+                                              <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
+                                              <td className="p-3"><span className="font-bold text-zinc-300 block">{t.propietario || t.nombre_expediente}</span></td>
+                                              <td className="p-3 text-zinc-400 font-bold">{t.encargado}</td>
+                                              <td className="p-3 text-zinc-400">{t.ubicacion || (tieneCoordenadas ? `${t.lat}, ${t.lng}` : '-')}</td>
+                                              <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
+                                              <td className="p-3 text-center">
+                                                {tieneCoordenadas ? (
+                                                  <button onClick={() => centrarMapaEnTrabajo(t)} className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors" title="Centrar mapa en este trabajo">
+                                                    📍 Pin
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-zinc-600 text-[10px]">Sin GPS</span>
+                                                )}
+                                              </td>
+                                              <td className="p-3 text-center">
+                                                <button onClick={() => setTrabajoEditandoDash({ ...t })} className="text-sm bg-[#222] hover:bg-[#333] border border-zinc-700 px-2 py-1 rounded text-white" title="Editar Expediente">✏️</button>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
                                       </tbody>
                                     </table>
                                   </div>
