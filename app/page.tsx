@@ -486,9 +486,14 @@ export default function DashboardAgrimensura() {
     return "#eab308";
   };
 
-  // INICIALIZACIÓN DEL MAPA LEAFLET (SÓLO 1 VEZ) Y ACTUALIZACIÓN DE MARCADORES SIN DESTRUIR EL MAPA
+// Referencia para saber si el mapa ya fue creado una vez
+  const mapInitializedRef = useRef(false);
+
   useEffect(() => {
-    if (activeTab !== "dashboard") return;
+    if (activeTab !== "dashboard") {
+      mapInitializedRef.current = false; // Si salimos de la pestaña, permitimos reinicializar si vuelve a entrar
+      return;
+    }
 
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link");
@@ -498,11 +503,11 @@ export default function DashboardAgrimensura() {
       document.head.appendChild(link);
     }
 
-    const initMap = () => {
+    const initOrUpdateMap = () => {
       const L = (window as any).L;
       if (!L || !mapContainerRef.current) return;
 
-      // Crear el mapa solo si no existe
+      // 1. Crear el mapa UNA SOLA VEZ
       if (!mapInstanceRef.current) {
         const map = L.map(mapContainerRef.current).setView([-31.6333, -60.7000], 12);
         mapInstanceRef.current = map;
@@ -515,7 +520,7 @@ export default function DashboardAgrimensura() {
         markersLayerRef.current = L.layerGroup().addTo(map);
       }
 
-      // Actualizar únicamente los marcadores sin recargar ni resetear el zoom ni la posición
+      // 2. Actualizar los marcadores de forma limpia sin tocar la posición ni el zoom actual
       if (markersLayerRef.current) {
         markersLayerRef.current.clearLayers();
 
@@ -536,6 +541,19 @@ export default function DashboardAgrimensura() {
         });
       }
     };
+
+    if (!(window as any).L) {
+      if (!document.getElementById("leaflet-js")) {
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.onload = initOrUpdateMap;
+        document.body.appendChild(script);
+      }
+    } else {
+      initOrUpdateMap();
+    }
+  }, [activeTab, listaTrabajosParaDashboard]);
 
     if (!(window as any).L) {
       if (!document.getElementById("leaflet-js")) {
