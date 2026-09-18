@@ -776,7 +776,7 @@ export default function DashboardAgrimensura() {
                                       <tbody>
                                         {listaMes.map((t: any) => {
                                           const tieneCoordenadas = t.lat && t.lng;
-                                          const esResaltado = trabajoResaltadoId === t.id;
+                                          const esResaltado = trabalhoResaltadoId === t.id;
                                           return (
                                             <tr key={t.id} className={`border-b border-zinc-800 text-xs transition-colors ${esResaltado ? 'bg-[#727A4E]/30' : 'hover:bg-[#2A2A2A]'}`}>
                                               <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
