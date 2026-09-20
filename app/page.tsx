@@ -12,6 +12,7 @@ const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 export default function DashboardAgrimensura() {
   const [activeTab, setActiveTab] = useState("trabajos");
   const [subTabTrabajos, setSubTabTrabajos] = useState("activos");
+  const [subTabFinanzas, setSubTabFinanzas] = useState("actual");
   
   const [leoAbierto, setLeoAbierto] = useState(false);
   const [brunoAbierto, setBrunoAbierto] = useState(false);
@@ -353,7 +354,7 @@ export default function DashboardAgrimensura() {
     alert("¡Semana liquidada y respaldada con éxito!");
   };
 
-  const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setActiveTab("finanzas"); } };
+  const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setSubTabFinanzas("actual"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
   const calcularPartes = (f: any) => {
@@ -638,7 +639,6 @@ export default function DashboardAgrimensura() {
           <button onClick={() => setActiveTab("trabajos")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "trabajos" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Expedientes</button>
           <button onClick={() => setActiveTab("dashboard")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "dashboard" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📊 Dashboard</button>
           <button onClick={() => setActiveTab("finanzas")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "finanzas" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Finanzas</button>
-          <button onClick={() => setActiveTab("historial")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "historial" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Historial</button>
           <button onClick={() => setActiveTab("catastro")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 ${activeTab === "catastro" ? "bg-white text-[#1A1A1A] shadow-md" : "bg-[#222222] text-[#727A4E] hover:bg-[#333] border border-[#727A4E]/30"}`}>🔑 SCIT</button>
         </div>
       </header>
@@ -776,7 +776,7 @@ export default function DashboardAgrimensura() {
                                       <tbody>
                                         {listaMes.map((t: any) => {
                                           const tieneCoordenadas = t.lat && t.lng;
-                                          const esResaltado = trabalhoResaltadoId === t.id;
+                                          const esResaltado = trabajoResaltadoId === t.id;
                                           return (
                                             <tr key={t.id} className={`border-b border-zinc-800 text-xs transition-colors ${esResaltado ? 'bg-[#727A4E]/30' : 'hover:bg-[#2A2A2A]'}`}>
                                               <td className="p-3 font-black text-[#A4B070]">{t.tipo || '-'}</td>
@@ -1141,232 +1141,242 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
+      {/* PESTAÑA: FINANZAS */}
       {activeTab === "finanzas" && (
         <div className="space-y-6">
-          <div className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg border border-zinc-800">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-zinc-800 gap-4">
-              <h2 className="font-black tracking-widest text-white uppercase text-sm md:text-base">{nuevaFinanza.esGasto5050 ? "💼 CARGAR GASTO COMPARTIDO (50/50)" : "📝 CARGAR EXPEDIENTE NORMAL"}</h2>
-              <button onClick={toggleGasto5050} type="button" className={`w-full md:w-auto px-5 py-2 text-xs font-bold uppercase tracking-wider rounded border transition-colors ${nuevaFinanza.esGasto5050 ? 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700' : 'bg-transparent text-[#727A4E] border-[#727A4E] hover:bg-[#727A4E]/10'}`}>
-                {nuevaFinanza.esGasto5050 ? "Volver a Expedientes" : "Cargar Gasto Compartido"}
-              </button>
-            </div>
-
-            <form onSubmit={guardarFinanza} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-              {!nuevaFinanza.esGasto5050 ? (
-                <>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input ref={tipoInputRef} required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Entró por</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.encargado} onChange={e => actualizarValoresFinanza('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-[#A4B070]">Ingreso Total ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-[#727A4E] bg-[#222222] p-3 rounded font-black text-[#A4B070] focus:outline-none focus:border-[#8B9461]" value={nuevaFinanza.ingreso === 0 ? "" : formatearPlata(nuevaFinanza.ingreso)} onChange={e => handlePlataInput('ingreso', e.target.value)} placeholder="0"/></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Caja ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Colegio ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.colegio === 0 ? "" : formatearPlata(nuevaFinanza.colegio)} onChange={e => handlePlataInput('colegio', e.target.value)} placeholder="0"/></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Leo ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraLeo === 0 ? "" : formatearPlata(nuevaFinanza.extraLeo)} onChange={e => handlePlataInput('extraLeo', e.target.value)} placeholder="0"/></div>
-                  <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Bruno ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraBruno === 0 ? "" : formatearPlata(nuevaFinanza.extraBruno)} onChange={e => handlePlataInput('extraBruno', e.target.value)} placeholder="0"/></div>
-                </>
-              ) : (
-                <>
-                  <div className="md:col-span-2 lg:col-span-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Concepto</label><input ref={tipoInputRef} required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.tramite} onChange={e => setNuevaFinanza({...nuevaFinanza, tramite: e.target.value})}/></div>
-                  <div className="md:col-span-2 lg:col-span-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Pagado por</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.encargado} onChange={e => setNuevaFinanza({...nuevaFinanza, encargado: e.target.value})}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
-                  <div className="md:col-span-2 lg:col-span-2"><label className="text-xs uppercase tracking-wider font-bold text-red-500">Monto del Gasto ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-red-900 bg-[#222222] p-3 rounded font-black text-red-400 focus:outline-none focus:border-red-500" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/><div className="text-[10px] md:text-xs tracking-wide text-zinc-500 mt-2">Se descontará 50% a cada uno automáticamente.</div></div>
-                </>
-              )}
-              <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row justify-end gap-3 mt-4">
-                {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
-                <button type="submit" className={`w-full sm:w-auto px-8 py-3 rounded text-white text-xs font-black tracking-widest uppercase shadow-md transition-colors ${editandoFinanzaId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoFinanzaId ? "GUARDAR" : "CARGAR"}</button>
-              </div>
-            </form>
+          <div className="flex flex-wrap gap-2 md:gap-4 border-b border-zinc-800 pb-4">
+            <button onClick={() => setSubTabFinanzas("actual")} className={`flex-1 md:flex-none font-bold tracking-widest uppercase text-xs md:text-sm px-4 py-2 rounded transition-colors ${subTabFinanzas === "actual" ? "bg-[#727A4E] text-white" : "text-zinc-500 hover:bg-zinc-800"}`}>💵 Semana Actual</button>
+            <button onClick={() => setSubTabFinanzas("historial")} className={`flex-1 md:flex-none font-bold tracking-widest uppercase text-xs md:text-sm px-4 py-2 rounded transition-colors ${subTabFinanzas === "historial" ? "bg-zinc-700 text-white" : "text-zinc-500 hover:bg-zinc-800"}`}>📁 Historial de Liquidaciones</button>
           </div>
 
-          <div className="bg-[#222222] border border-[#727A4E]/30 rounded-xl shadow-2xl p-6 md:p-8 flex flex-col xl:flex-row items-center justify-between relative overflow-hidden gap-8">
-            <div className="flex flex-col sm:flex-row gap-8 lg:gap-16 relative z-10 w-full xl:w-auto justify-around xl:justify-start">
-              <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
-                <h4 className="text-[#727A4E] font-black tracking-widest text-sm mb-3">RESUMEN LEO</h4>
-                <p className="text-sm mb-1 text-zinc-400">Cobrado: <span className="text-white font-medium">${formatearPlata(resumenActual.cobradoLeo)}</span></p>
-                <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioLeoTotal)}</span></p>
-                <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosLeo)}</span></p>
-                <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                  {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceLeo))}`}
-                </p>
+          {subTabFinanzas === "actual" && (
+            <div className="space-y-6">
+              <div className="bg-[#1A1A1A] p-4 md:p-6 rounded-xl shadow-lg border border-zinc-800">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-zinc-800 gap-4">
+                  <h2 className="font-black tracking-widest text-white uppercase text-sm md:text-base">{nuevaFinanza.esGasto5050 ? "💼 CARGAR GASTO COMPARTIDO (50/50)" : "📝 CARGAR EXPEDIENTE NORMAL"}</h2>
+                  <button onClick={toggleGasto5050} type="button" className={`w-full md:w-auto px-5 py-2 text-xs font-bold uppercase tracking-wider rounded border transition-colors ${nuevaFinanza.esGasto5050 ? 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700' : 'bg-transparent text-[#727A4E] border-[#727A4E] hover:bg-[#727A4E]/10'}`}>
+                    {nuevaFinanza.esGasto5050 ? "Volver a Expedientes" : "Cargar Gasto Compartido"}
+                  </button>
+                </div>
+
+                <form onSubmit={guardarFinanza} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                  {!nuevaFinanza.esGasto5050 ? (
+                    <>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input ref={tipoInputRef} required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Entró por</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.encargado} onChange={e => actualizarValoresFinanza('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-[#A4B070]">Ingreso Total ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-[#727A4E] bg-[#222222] p-3 rounded font-black text-[#A4B070] focus:outline-none focus:border-[#8B9461]" value={nuevaFinanza.ingreso === 0 ? "" : formatearPlata(nuevaFinanza.ingreso)} onChange={e => handlePlataInput('ingreso', e.target.value)} placeholder="0"/></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Caja ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Colegio ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.colegio === 0 ? "" : formatearPlata(nuevaFinanza.colegio)} onChange={e => handlePlataInput('colegio', e.target.value)} placeholder="0"/></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Leo ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraLeo === 0 ? "" : formatearPlata(nuevaFinanza.extraLeo)} onChange={e => handlePlataInput('extraLeo', e.target.value)} placeholder="0"/></div>
+                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Bruno ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraBruno === 0 ? "" : formatearPlata(nuevaFinanza.extraBruno)} onChange={e => handlePlataInput('extraBruno', e.target.value)} placeholder="0"/></div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="md:col-span-2 lg:col-span-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Concepto</label><input ref={tipoInputRef} required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.tramite} onChange={e => setNuevaFinanza({...nuevaFinanza, tramite: e.target.value})}/></div>
+                      <div className="md:col-span-2 lg:col-span-1"><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Pagado por</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.encargado} onChange={e => setNuevaFinanza({...nuevaFinanza, encargado: e.target.value})}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
+                      <div className="md:col-span-2 lg:col-span-2"><label className="text-xs uppercase tracking-wider font-bold text-red-500">Monto del Gasto ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-red-900 bg-[#222222] p-3 rounded font-black text-red-400 focus:outline-none focus:border-red-500" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/><div className="text-[10px] md:text-xs tracking-wide text-zinc-500 mt-2">Se descontará 50% a cada uno automáticamente.</div></div>
+                    </>
+                  )}
+                  <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row justify-end gap-3 mt-4">
+                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
+                    <button type="submit" className={`w-full sm:w-auto px-8 py-3 rounded text-white text-xs font-black tracking-widest uppercase shadow-md transition-colors ${editandoFinanzaId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoFinanzaId ? "GUARDAR" : "CARGAR"}</button>
+                  </div>
+                </form>
               </div>
-              <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
-                <h4 className="text-[#727A4E] font-black tracking-widest text-sm mb-3">RESUMEN BRUNO</h4>
-                <p className="text-sm mb-1 text-zinc-400">Cobrado: <span className="text-white font-medium">${formatearPlata(resumenActual.cobradoBruno)}</span></p>
-                <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioBrunoTotal)}</span></p>
-                <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosBruno)}</span></p>
-                <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                  {resumenActual.balanceBruno > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceBruno)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceBruno))}`}
-                </p>
+
+              <div className="bg-[#222222] border border-[#727A4E]/30 rounded-xl shadow-2xl p-6 md:p-8 flex flex-col xl:flex-row items-center justify-between relative overflow-hidden gap-8">
+                <div className="flex flex-col sm:flex-row gap-8 lg:gap-16 relative z-10 w-full xl:w-auto justify-around xl:justify-start">
+                  <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
+                    <h4 className="text-[#727A4E] font-black tracking-widest text-sm mb-3">RESUMEN LEO</h4>
+                    <p className="text-sm mb-1 text-zinc-400">Cobrado: <span className="text-white font-medium">${formatearPlata(resumenActual.cobradoLeo)}</span></p>
+                    <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioLeoTotal)}</span></p>
+                    <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosLeo)}</span></p>
+                    <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                      {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceLeo))}`}
+                    </p>
+                  </div>
+                  <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
+                    <h4 className="text-[#727A4E] font-black tracking-widest text-sm mb-3">RESUMEN BRUNO</h4>
+                    <p className="text-sm mb-1 text-zinc-400">Cobrado: <span className="text-white font-medium">${formatearPlata(resumenActual.cobradoBruno)}</span></p>
+                    <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioBrunoTotal)}</span></p>
+                    <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosBruno)}</span></p>
+                    <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                      {resumenActual.balanceBruno > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceBruno)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceBruno))}`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 w-full xl:w-auto items-center relative z-10">
+                  <div className="w-full bg-[#1A1A1A] p-3 rounded-lg border border-zinc-800 text-center">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-1">📎 Adjuntar Comprobante (Opcional)</label>
+                    <input type="file" accept="image/*,application/pdf" onChange={e => setArchivoComprobante(e.target.files?.[0] || null)} className="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#727A4E] file:text-white hover:file:bg-[#8B9461] cursor-pointer w-full"/>
+                  </div>
+                  <button onClick={liquidarSemana} className="w-full bg-[#727A4E] text-white hover:bg-[#8B9461] px-8 py-4 rounded font-black text-sm uppercase tracking-widest shadow-lg border border-[#8B9461]">CERRAR SEMANA</button>
+                </div>
+              </div>
+
+              <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+                    <thead><tr className="bg-[#222222] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Tipo</th><th className="p-4">Propietario / Pagó</th><th className="p-4">Ingreso / Costo</th><th className="p-4">Gastos Trámite</th><th className="p-4 text-zinc-300">Limpio Leo</th><th className="p-4 text-zinc-300">Limpio Bruno</th><th className="p-4 w-16">Acción</th></tr></thead>
+                    <tbody>
+                      {finanzas.map((f: any) => {
+                        const partes = calcularPartes(f);
+                        return (
+                          <tr key={f.id} className={`border-b border-zinc-800 hover:bg-[#2A2A2A] ${f.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
+                            <td className="p-4 font-bold text-zinc-200">{f.tipo_tramite} {f.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase tracking-wider">50/50</span>}</td>
+                            <td className="p-4 text-zinc-400">{f.es_gasto_5050 ? <span className="font-bold text-zinc-300">Pagó {f.encargado}</span> : f.propietario}</td>
+                            <td className={`p-4 font-black ${f.es_gasto_5050 ? 'text-red-400' : 'text-[#A4B070]'}`}>${formatearPlata(f.es_gasto_5050 ? f.caja : f.ingreso_total)}</td>
+                            <td className="p-4 text-zinc-500">{f.es_gasto_5050 ? '-' : `$${formatearPlata(partes.totalAportes)}`}</td>
+                            <td className={`p-4 font-bold ${partes.limpioLeo < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
+                            <td className={`p-4 font-bold ${partes.limpioBruno < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
+                            <td className="p-4 flex gap-3">
+                              <button onClick={() => iniciarEdicionFinanza(f)} className="text-lg opacity-40 hover:opacity-100" title="Editar">✏️</button>
+                              <button onClick={() => eliminarFinanza(f.id)} className="text-lg opacity-40 hover:opacity-100" title="Borrar">🗑️</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="flex flex-col gap-3 w-full xl:w-auto items-center relative z-10">
-              <div className="w-full bg-[#1A1A1A] p-3 rounded-lg border border-zinc-800 text-center">
-                <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-[#727A4E] block mb-1">📎 Adjuntar Comprobante (Opcional)</label>
-                <input type="file" accept="image/*,application/pdf" onChange={e => setArchivoComprobante(e.target.files?.[0] || null)} className="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#727A4E] file:text-white hover:file:bg-[#8B9461] cursor-pointer w-full"/>
-              </div>
-              <button onClick={liquidarSemana} className="w-full bg-[#727A4E] text-white hover:bg-[#8B9461] px-8 py-4 rounded font-black text-sm uppercase tracking-widest shadow-lg border border-[#8B9461]">CERRAR SEMANA</button>
-            </div>
-          </div>
-
-          <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left whitespace-nowrap min-w-[800px]">
-                <thead><tr className="bg-[#222222] text-[#727A4E] font-bold uppercase text-xs tracking-wider border-b border-zinc-800"><th className="p-4">Tipo</th><th className="p-4">Propietario / Pagó</th><th className="p-4">Ingreso / Costo</th><th className="p-4">Gastos Trámite</th><th className="p-4 text-zinc-300">Limpio Leo</th><th className="p-4 text-zinc-300">Limpio Bruno</th><th className="p-4 w-16">Acción</th></tr></thead>
-                <tbody>
-                  {finanzas.map((f: any) => {
-                    const partes = calcularPartes(f);
-                    return (
-                      <tr key={f.id} className={`border-b border-zinc-800 hover:bg-[#2A2A2A] ${f.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
-                        <td className="p-4 font-bold text-zinc-200">{f.tipo_tramite} {f.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase tracking-wider">50/50</span>}</td>
-                        <td className="p-4 text-zinc-400">{f.es_gasto_5050 ? <span className="font-bold text-zinc-300">Pagó {f.encargado}</span> : f.propietario}</td>
-                        <td className={`p-4 font-black ${f.es_gasto_5050 ? 'text-red-400' : 'text-[#A4B070]'}`}>${formatearPlata(f.es_gasto_5050 ? f.caja : f.ingreso_total)}</td>
-                        <td className="p-4 text-zinc-500">{f.es_gasto_5050 ? '-' : `$${formatearPlata(partes.totalAportes)}`}</td>
-                        <td className={`p-4 font-bold ${partes.limpioLeo < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
-                        <td className={`p-4 font-bold ${partes.limpioBruno < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
-                        <td className="p-4 flex gap-3">
-                          <button onClick={() => iniciarEdicionFinanza(f)} className="text-lg opacity-40 hover:opacity-100" title="Editar">✏️</button>
-                          <button onClick={() => eliminarFinanza(f.id)} className="text-lg opacity-40 hover:opacity-100" title="Borrar">🗑️</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "historial" && (
-        <div className="space-y-4">
-          <h2 className="text-xl md:text-2xl font-black tracking-widest text-white mb-6 uppercase border-b border-zinc-800 pb-4">Finanzas Liquidadas</h2>
-          
-          {aniosFinanzasOrdenados.length === 0 ? (
-            <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#1A1A1A] rounded-xl border border-zinc-800">No hay historial de finanzas</p>
-          ) : (
+          {subTabFinanzas === "historial" && (
             <div className="space-y-4">
-              {aniosFinanzasOrdenados.map(anio => {
-                const mesesDelAnio = Object.keys(historialAgrupado[anio]).sort((a, b) => b.localeCompare(a));
-                return (
-                  <div key={anio} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                    <div onClick={() => toggleAnioFinanzas(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                      <h3 className="font-bold text-white uppercase tracking-widest text-sm md:text-base flex items-center gap-2">
-                        <span className="text-[#727A4E] text-xs">{aniosFinanzasAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
-                      </h3>
-                      <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
-                        {Object.values(historialAgrupado[anio]).map((m: any) => Object.values(m).flat()).flat().length} Registros
-                      </span>
-                    </div>
+              <h3 className="text-lg font-black tracking-widest text-white mb-4 uppercase">Historial de Finanzas Liquidadas</h3>
+              
+              {aniosFinanzasOrdenados.length === 0 ? (
+                <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#1A1A1A] rounded-xl border border-zinc-800">No hay historial de finanzas</p>
+              ) : (
+                <div className="space-y-4">
+                  {aniosFinanzasOrdenados.map(anio => {
+                    const mesesDelAnio = Object.keys(historialAgrupado[anio]).sort((a, b) => b.localeCompare(a));
+                    return (
+                      <div key={anio} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
+                        <div onClick={() => toggleAnioFinanzas(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                          <h4 className="font-bold text-white uppercase tracking-widest text-sm md:text-base flex items-center gap-2">
+                            <span className="text-[#727A4E] text-xs">{aniosFinanzasAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                          </h4>
+                          <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
+                            {Object.values(historialAgrupado[anio]).map((m: any) => Object.values(m).flat()).flat().length} Registros
+                          </span>
+                        </div>
 
-                    {aniosFinanzasAbiertos[anio] && (
-                      <div className="p-3 space-y-3">
-                        {mesesDelAnio.map(mesNum => {
-                          const keyMesFinanza = `${anio}-${mesNum}`;
-                          const semanasDelMes = historialAgrupado[anio][mesNum];
-                          const nombresSemanas = Object.keys(semanasDelMes).sort((a, b) => {
-                            if (a === "anterior") return 1;
-                            if (b === "anterior") return -1;
-                            return new Date(b).getTime() - new Date(a).getTime();
-                          });
-                          const nombreMes = nombresMeses[mesNum] || mesNum;
+                        {aniosFinanzasAbiertos[anio] && (
+                          <div className="p-3 space-y-3">
+                            {mesesDelAnio.map(mesNum => {
+                              const keyMesFinanza = `${anio}-${mesNum}`;
+                              const semanasDelMes = historialAgrupado[anio][mesNum];
+                              const nombresSemanas = Object.keys(semanasDelMes).sort((a, b) => {
+                                if (a === "anterior") return 1;
+                                if (b === "anterior") return -1;
+                                return new Date(b).getTime() - new Date(a).getTime();
+                              });
+                              const nombreMes = nombresMeses[mesNum] || mesNum;
 
-                          return (
-                            <div key={keyMesFinanza} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
-                              <div onClick={() => toggleMesFinanzas(keyMesFinanza)} className="p-3 bg-[#1D1D1D] flex justify-between cursor-pointer hover:bg-[#252525] select-none">
-                                <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
-                                  <span className="text-[#727A4E] text-[10px]">{mesesFinanzasAbiertos[keyMesFinanza] ? '▼' : '▶'}</span> {nombreMes}
-                                </span>
-                                <span className="text-xs text-zinc-500 font-bold">{nombresSemanas.length} Semanas</span>
-                              </div>
+                              return (
+                                <div key={keyMesFinanza} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
+                                  <div onClick={() => toggleMesFinanzas(keyMesFinanza)} className="p-3 bg-[#1D1D1D] flex justify-between cursor-pointer hover:bg-[#252525] select-none">
+                                    <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                                      <span className="text-[#727A4E] text-[10px]">{mesesFinanzasAbiertos[keyMesFinanza] ? '▼' : '▶'}</span> {nombreMes}
+                                    </span>
+                                    <span className="text-xs text-zinc-500 font-bold">{nombresSemanas.length} Semanas</span>
+                                  </div>
 
-                              {mesesFinanzasAbiertos[keyMesFinanza] && (
-                                <div className="p-3 space-y-3">
-                                  {nombresSemanas.map(fechaKey => {
-                                    const trabajosDelBloque = semanasDelMes[fechaKey];
-                                    const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
-                                    const estaAbierto = semanasAbiertas[fechaKey] || false;
-                                    const resumenBloque = generarResumen(trabajosDelBloque);
-                                    const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
+                                  {mesesFinanzasAbiertos[keyMesFinanza] && (
+                                    <div className="p-3 space-y-3">
+                                      {nombresSemanas.map(fechaKey => {
+                                        const trabajosDelBloque = semanasDelMes[fechaKey];
+                                        const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
+                                        const estaAbierto = semanasAbiertas[fechaKey] || false;
+                                        const resumenBloque = generarResumen(trabajosDelBloque);
+                                        const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
 
-                                    return (
-                                      <div key={fechaKey} className="bg-[#111111] rounded-xl shadow-md overflow-hidden border border-zinc-800 ml-2 md:ml-4">
-                                        <div className="bg-[#1F1F1F] p-3 md:p-4 border-b border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-3 md:gap-0">
-                                          <h4 onClick={() => toggleHistorial(fechaKey)} className="font-bold text-xs md:text-sm cursor-pointer flex-1 tracking-widest uppercase flex items-center gap-2 hover:text-[#727A4E] w-full">
-                                            {tituloBloque} 
-                                            {comprobanteUrl && <span className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[9px] px-2 py-0.5 rounded font-bold">📎 Con Comprobante</span>}
-                                            <span className="text-zinc-400 text-[10px] font-bold px-2 py-0.5 bg-[#111] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
-                                          </h4>
-                                          <div className="flex gap-2 w-full md:w-auto justify-end">
-                                            <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
-                                            <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
-                                          </div>
-                                        </div>
-                                        
-                                        {estaAbierto && (
-                                          <div>
-                                            <div className="bg-[#1A1A1A] p-4 border-b border-zinc-800 flex flex-col lg:flex-row gap-6 justify-between items-center">
-                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full lg:w-auto flex-1">
-                                                <div className="bg-[#222] p-3 rounded-lg border border-zinc-800 text-center sm:text-left">
-                                                  <span className="text-[10px] font-black tracking-widest text-[#727A4E] block mb-1">SOCIO LEO (SEMANA)</span>
-                                                  <p className="text-xs text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
-                                                  <p className={`text-sm font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                                                    {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
-                                                  </p>
+                                        return (
+                                          <div key={fechaKey} className="bg-[#111111] rounded-xl shadow-md overflow-hidden border border-zinc-800 ml-2 md:ml-4">
+                                            <div className="bg-[#1F1F1F] p-3 md:p-4 border-b border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-3 md:gap-0">
+                                              <h5 onClick={() => toggleHistorial(fechaKey)} className="font-bold text-xs md:text-sm cursor-pointer flex-1 tracking-widest uppercase flex items-center gap-2 hover:text-[#727A4E] w-full">
+                                                {tituloBloque} 
+                                                {comprobanteUrl && <span className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[9px] px-2 py-0.5 rounded font-bold">📎 Con Comprobante</span>}
+                                                <span className="text-zinc-400 text-[10px] font-bold px-2 py-0.5 bg-[#111] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
+                                              </h5>
+                                              <div className="flex gap-2 w-full md:w-auto justify-end">
+                                                <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
+                                                <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
+                                              </div>
+                                            </div>
+                                            
+                                            {estaAbierto && (
+                                              <div>
+                                                <div className="bg-[#1A1A1A] p-4 border-b border-zinc-800 flex flex-col lg:flex-row gap-6 justify-between items-center">
+                                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full lg:w-auto flex-1">
+                                                    <div className="bg-[#222] p-3 rounded-lg border border-zinc-800 text-center sm:text-left">
+                                                      <span className="text-[10px] font-black tracking-widest text-[#727A4E] block mb-1">SOCIO LEO (SEMANA)</span>
+                                                      <p className="text-xs text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioLeoTotal)}</span></p>
+                                                      <p className={`text-sm font-black ${resumenBloque.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                                                        {resumenBloque.balanceLeo > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceLeo)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceLeo))}`}
+                                                      </p>
+                                                    </div>
+                                                    <div className="bg-[#222] p-3 rounded-lg border border-zinc-800 text-center sm:text-left">
+                                                      <span className="text-[10px] font-black tracking-widest text-[#727A4E] block mb-1">SOCIO BRUNO (SEMANA)</span>
+                                                      <p className="text-xs text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
+                                                      <p className={`text-sm font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
+                                                        {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
+                                                      </p>
+                                                    </div>
+                                                  </div>
+
+                                                  {comprobanteUrl && (
+                                                    <div className="flex flex-col items-center justify-center bg-[#222] p-3 rounded-lg border border-zinc-800 w-full lg:w-40">
+                                                      <span className="text-[9px] font-bold text-zinc-400 mb-1 uppercase tracking-wider">Comprobante</span>
+                                                      <a href={comprobanteUrl} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-3 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase text-center w-full">
+                                                        🔍 Ver Imagen
+                                                      </a>
+                                                    </div>
+                                                  )}
                                                 </div>
-                                                <div className="bg-[#222] p-3 rounded-lg border border-zinc-800 text-center sm:text-left">
-                                                  <span className="text-[10px] font-black tracking-widest text-[#727A4E] block mb-1">SOCIO BRUNO (SEMANA)</span>
-                                                  <p className="text-xs text-zinc-400 mb-1">Limpio Gen.: <span className="text-white font-bold">${formatearPlata(resumenBloque.limpioBrunoTotal)}</span></p>
-                                                  <p className={`text-sm font-black ${resumenBloque.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
-                                                    {resumenBloque.balanceBruno > 0 ? `Transfirió: $${formatearPlata(resumenBloque.balanceBruno)}` : `Recibió: $${formatearPlata(Math.abs(resumenBloque.balanceBruno))}`}
-                                                  </p>
+
+                                                <div className="overflow-x-auto">
+                                                  <table className="w-full text-left whitespace-nowrap min-w-[700px]">
+                                                    <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
+                                                    <tbody>
+                                                      {trabajosDelBloque.map((h: any) => {
+                                                        const partes = calcularPartes(h);
+                                                        return (
+                                                          <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
+                                                            <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
+                                                            <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
+                                                            <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
+                                                            <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                                            <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
+                                                            <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
+                                                          </tr>
+                                                        );
+                                                      })}
+                                                    </tbody>
+                                                  </table>
                                                 </div>
                                               </div>
-
-                                              {comprobanteUrl && (
-                                                <div className="flex flex-col items-center justify-center bg-[#222] p-3 rounded-lg border border-zinc-800 w-full lg:w-40">
-                                                  <span className="text-[9px] font-bold text-zinc-400 mb-1 uppercase tracking-wider">Comprobante</span>
-                                                  <a href={comprobanteUrl} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-3 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase text-center w-full">
-                                                    🔍 Ver Imagen
-                                                  </a>
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            <div className="overflow-x-auto">
-                                              <table className="w-full text-left whitespace-nowrap min-w-[700px]">
-                                                <thead><tr className="bg-[#1A1A1A] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800"><th className="p-3">Tipo</th><th className="p-3">Propietario</th><th className="p-3">Entró Por</th><th className="p-3">Total/Gasto</th><th className="p-3">Limpio Leo</th><th className="p-3">Limpio Bruno</th></tr></thead>
-                                                <tbody>
-                                                  {trabajosDelBloque.map((h: any) => {
-                                                    const partes = calcularPartes(h);
-                                                    return (
-                                                      <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
-                                                        <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
-                                                        <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
-                                                        <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                        <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
-                                                        <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
-                                                        <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
-                                                      </tr>
-                                                    );
-                                                  })}
-                                                </tbody>
-                                              </table>
-                                            </div>
+                                            )}
                                           </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
