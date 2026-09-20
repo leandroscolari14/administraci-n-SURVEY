@@ -9,7 +9,16 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const telegramBotToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "";
 const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 
+// Correos permitidos (Tuyo y de tu socio)
+const EMAILS_PERMITIDOS = [
+  "leandroscolari14@gmail.com",
+  "brunoverga13@gmail.com" // Reemplazá por el mail de Bruno si es diferente
+];
+
 export default function DashboardAgrimensura() {
+  const [session, setSession] = useState<any>(null);
+  const [cargandoAuth, setCargandoAuth] = useState(true);
+
   const [activeTab, setActiveTab] = useState("trabajos");
   const [subTabTrabajos, setSubTabTrabajos] = useState("activos");
   const [subTabFinanzas, setSubTabFinanzas] = useState("actual");
@@ -73,7 +82,49 @@ export default function DashboardAgrimensura() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapMarkersMapRef = useRef<Map<string, any>>(new Map());
 
-  useEffect(() => { cargarDatos(); }, []);
+  // Manejo de Sesión de Supabase (Persistencia automática en localStorage)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      validarYEstablecerSesion(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      validarYEstablecerSesion(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const validarYEstablecerSesion = (currentSession: any) => {
+    if (currentSession) {
+      const emailUser = currentSession.user?.email;
+      if (EMAILS_PERMITIDOS.includes(emailUser)) {
+        setSession(currentSession);
+        cargarDatos();
+      } else {
+        alert("Acceso denegado. Este correo no está autorizado.");
+        supabase.auth.signOut();
+        setSession(null);
+      }
+    } else {
+      setSession(null);
+    }
+    setCargandoAuth(false);
+  };
+
+  const iniciarSesionGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+  };
+
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+  };
 
   useEffect(() => {
     let intervalo: any;
@@ -626,6 +677,38 @@ export default function DashboardAgrimensura() {
     }
   }, [activeTab, listaTrabajosParaDashboard]);
 
+  // Pantalla de carga inicial
+  if (cargandoAuth) {
+    return (
+      <div className="min-h-screen bg-[#111111] flex items-center justify-center font-sans text-zinc-300">
+        <div className="text-center">
+          <p className="text-[#727A4E] font-bold tracking-widest uppercase animate-pulse">Cargando sistema...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Pantalla de Login si no hay sesión iniciada
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-[#111111] flex items-center justify-center p-4 font-sans text-zinc-300">
+        <div className="bg-[#1A1A1A] p-8 md:p-12 rounded-2xl shadow-2xl border border-zinc-800 max-w-md w-full text-center border-l-4 border-[#727A4E]">
+          <h1 className="text-3xl font-black tracking-widest uppercase text-white mb-2">SURVEY</h1>
+          <p className="text-[#727A4E] tracking-widest text-xs font-bold mb-8">ADMINISTRACIÓN & GESTIÓN</p>
+          
+          <p className="text-sm text-zinc-400 mb-6">Iniciá sesión con tu cuenta de Google autorizada para ingresar al sistema.</p>
+          
+          <button 
+            onClick={iniciarSesionGoogle}
+            className="w-full bg-white hover:bg-zinc-200 text-zinc-900 font-bold py-3.5 px-6 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-colors text-sm uppercase tracking-wider"
+          >
+            <span>🌐</span> Ingresar con Google
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#111111] p-4 md:p-8 font-sans text-zinc-300 overflow-x-hidden">
       
@@ -633,13 +716,14 @@ export default function DashboardAgrimensura() {
       <header className="mb-6 md:mb-8 bg-[#1A1A1A] p-6 md:p-8 rounded-xl shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-6 border-l-4 border-[#727A4E]">
         <div className="text-center lg:text-left">
           <h1 className="text-3xl md:text-4xl font-black tracking-widest uppercase flex flex-col sm:flex-row items-center gap-2 sm:gap-3 text-white">SURVEY</h1>
-          <p className="text-[#727A4E] tracking-widest text-xs md:text-sm font-bold mt-1">ADMINISTRACIÓN & GESTIÓN</p>
+          <p className="text-[#727A4E] tracking-widest text-xs md:text-sm font-bold mt-1">ADMINISTRACIÓN & GESTIÓN — <span className="text-zinc-400 font-normal text-xs">{session.user.email}</span></p>
         </div>
-        <div className="flex flex-wrap justify-center lg:justify-end gap-2 w-full lg:w-auto">
+        <div className="flex flex-wrap items-center justify-center lg:justify-end gap-2 w-full lg:w-auto">
           <button onClick={() => setActiveTab("trabajos")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "trabajos" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Expedientes</button>
           <button onClick={() => setActiveTab("dashboard")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "dashboard" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📊 Dashboard</button>
           <button onClick={() => setActiveTab("finanzas")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "finanzas" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Finanzas</button>
           <button onClick={() => setActiveTab("catastro")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 ${activeTab === "catastro" ? "bg-white text-[#1A1A1A] shadow-md" : "bg-[#222222] text-[#727A4E] hover:bg-[#333] border border-[#727A4E]/30"}`}>🔑 SCIT</button>
+          <button onClick={cerrarSesion} className="px-3 py-2 md:px-4 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs bg-red-900/30 text-red-400 hover:bg-red-900/60 border border-red-800/50 transition-all" title="Cerrar Sesión">🚪 Salir</button>
         </div>
       </header>
 
