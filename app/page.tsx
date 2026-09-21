@@ -11,14 +11,28 @@ const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
-const ETAPAS = [
+const ETAPAS_BASE = [
   { id: 'e_medido', label: 'Medido' }, { id: 'e_definido', label: 'Definido' },
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' },
   { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
   { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
 ];
 
-const contarEtapasMarcadas = (t: any) => ETAPAS.filter(e => t[e.id]).length;
+// "Solicitado LD" solo aplica a VEP/REP. "CC Emitido" solo aplica a
+// VEP/REP/CCU; el resto de los trámites terminan en "Registrado".
+const obtenerEtapasParaTrabajo = (t: any) => {
+  const tipo = (t.tipo || '').trim().toUpperCase();
+  const esVepRep = tipo.includes('VEP') || tipo.includes('REP');
+  const tieneCC = esVepRep || tipo.includes('CCU');
+
+  let etapas = ETAPAS_BASE.filter(e => e.id !== 'e_solicitado_ld' || esVepRep);
+  if (!tieneCC) {
+    etapas = etapas.filter(e => e.id !== 'e_cc_emitido').concat([{ id: 'e_registrado', label: 'Registrado' }]);
+  }
+  return etapas;
+};
+
+const contarEtapasMarcadas = (t: any) => obtenerEtapasParaTrabajo(t).filter(e => t[e.id]).length;
 
 // Pendientes primero; dentro de cada grupo, los que tienen menos etapas
 // marcadas van arriba (así los recién agregados quedan siempre visibles).
@@ -649,9 +663,10 @@ export default function DashboardAgrimensura() {
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
   const RenderEtapas = ({ t }: { t: any }) => {
+    const etapas = obtenerEtapasParaTrabajo(t);
     return (
       <div className="flex gap-1 flex-wrap items-center py-1">
-        {ETAPAS.map((e: any) => (
+        {etapas.map((e: any) => (
           <button key={e.id} onClick={() => toggleEtapa(t.id, e.id, t[e.id])} title={e.label}
             className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${t[e.id] ? 'bg-[#727A4E] text-white border-[#727A4E]' : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500'}`}>
             {e.label}
@@ -662,6 +677,7 @@ export default function DashboardAgrimensura() {
   };
 
   const TarjetaTrabajo = ({ t }: { t: any }) => {
+    const totalEtapas = obtenerEtapasParaTrabajo(t).length;
     const marcadas = contarEtapasMarcadas(t);
     const esPendiente = t.color_alerta === 'amarillo';
     return (
@@ -678,9 +694,9 @@ export default function DashboardAgrimensura() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-[#727A4E] transition-all" style={{ width: `${(marcadas / ETAPAS.length) * 100}%` }}></div>
+                <div className="h-full bg-[#727A4E] transition-all" style={{ width: `${(marcadas / totalEtapas) * 100}%` }}></div>
               </div>
-              <span className="text-[10px] text-zinc-500 font-bold whitespace-nowrap">{marcadas}/{ETAPAS.length}</span>
+              <span className="text-[10px] text-zinc-500 font-bold whitespace-nowrap">{marcadas}/{totalEtapas}</span>
             </div>
             <RenderEtapas t={t} />
           </div>
