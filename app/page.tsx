@@ -18,6 +18,10 @@ const EMAILS_PERMITIDOS = [
 export default function DashboardAgrimensura() {
   const [session, setSession] = useState<any>(null);
   const [cargandoAuth, setCargandoAuth] = useState(true);
+  const [emailLogin, setEmailLogin] = useState("");
+  const [passwordLogin, setPasswordLogin] = useState("");
+  const [errorLogin, setErrorLogin] = useState("");
+  const [enviandoLogin, setEnviandoLogin] = useState(false);
 
   const [activeTab, setActiveTab] = useState("trabajos");
   const [subTabTrabajos, setSubTabTrabajos] = useState("activos");
@@ -112,10 +116,18 @@ export default function DashboardAgrimensura() {
     setCargandoAuth(false);
   };
 
-  const iniciarSesionGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google'
+  const iniciarSesionPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorLogin("");
+    setEnviandoLogin(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailLogin,
+      password: passwordLogin,
     });
+    if (error) {
+      setErrorLogin("Email o contraseña incorrectos.");
+    }
+    setEnviandoLogin(false);
   };
 
   const cerrarSesion = async () => {
@@ -693,14 +705,44 @@ export default function DashboardAgrimensura() {
           <h1 className="text-3xl font-black tracking-widest uppercase text-white mb-2">SURVEY</h1>
           <p className="text-[#727A4E] tracking-widest text-xs font-bold mb-8">ADMINISTRACIÓN & GESTIÓN</p>
           
-          <p className="text-sm text-zinc-400 mb-6">Iniciá sesión con tu cuenta de Google autorizada para ingresar al sistema.</p>
-          
-          <button 
-            onClick={iniciarSesionGoogle}
-            className="w-full bg-white hover:bg-zinc-200 text-zinc-900 font-bold py-3.5 px-6 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-colors text-sm uppercase tracking-wider"
-          >
-            <span>🌐</span> Ingresar con Google
-          </button>
+          <p className="text-sm text-zinc-400 mb-6">Iniciá sesión con tu cuenta autorizada para ingresar al sistema.</p>
+
+          <form onSubmit={iniciarSesionPassword} className="space-y-3 text-left">
+            <div>
+              <label className="text-xs uppercase tracking-wider text-zinc-500 font-bold">Email</label>
+              <input
+                type="email"
+                required
+                value={emailLogin}
+                onChange={(e) => setEmailLogin(e.target.value)}
+                className="w-full mt-1 bg-[#111111] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#727A4E]"
+                placeholder="tu@email.com"
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wider text-zinc-500 font-bold">Contraseña</label>
+              <input
+                type="password"
+                required
+                value={passwordLogin}
+                onChange={(e) => setPasswordLogin(e.target.value)}
+                className="w-full mt-1 bg-[#111111] border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#727A4E]"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {errorLogin && (
+              <p className="text-red-400 text-xs font-bold">{errorLogin}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={enviandoLogin}
+              className="w-full bg-white hover:bg-zinc-200 disabled:opacity-60 text-zinc-900 font-bold py-3.5 px-6 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-colors text-sm uppercase tracking-wider"
+            >
+              {enviandoLogin ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
         </div>
       </div>
     );
