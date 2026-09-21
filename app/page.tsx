@@ -9,6 +9,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const telegramBotToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "";
 const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 
+const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
 // Correos permitidos (Tuyo y de tu socio)
 const EMAILS_PERMITIDOS = [
   "leandroscolari14@gmail.com",
@@ -620,7 +622,7 @@ export default function DashboardAgrimensura() {
     if (!t.lat || !t.lng || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
     map.setView([Number(t.lat), Number(t.lng)], 16, { animate: true });
-    
+
     const marker = mapMarkersMapRef.current.get(t.id);
     if (marker) {
       marker.openPopup();
@@ -690,7 +692,7 @@ export default function DashboardAgrimensura() {
             });
 
             const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon });
-            marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small>`);
+            marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small><br><a href="${urlGoogleMaps(t.lat, t.lng)}" target="_blank" rel="noreferrer" style="color:#3b82f6;font-weight:bold;text-decoration:none">📍 Abrir en Google Maps</a>`);
             markersLayerRef.current.addLayer(marker);
             mapMarkersMapRef.current.set(t.id, marker);
           }
@@ -934,9 +936,14 @@ export default function DashboardAgrimensura() {
                                               <td className="p-3 text-zinc-400">{t.fecha_finalizacion ? new Date(t.fecha_finalizacion).toLocaleDateString("es-AR", { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td>
                                               <td className="p-3 text-center">
                                                 {tieneCoordenadas ? (
-                                                  <button onClick={() => centrarMapaEnTrabajo(t)} className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors" title="Centrar mapa en este trabajo">
-                                                    📍 Pin
-                                                  </button>
+                                                  <div className="flex items-center justify-center gap-1.5">
+                                                    <button onClick={() => centrarMapaEnTrabajo(t)} className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors" title="Centrar mapa en este trabajo">
+                                                      📍 Pin
+                                                    </button>
+                                                    <a href={urlGoogleMaps(t.lat, t.lng)} target="_blank" rel="noreferrer" className="bg-zinc-700/40 hover:bg-zinc-700/70 text-zinc-300 border border-zinc-600/50 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors" title="Abrir en Google Maps">
+                                                      🗺️
+                                                    </a>
+                                                  </div>
                                                 ) : (
                                                   <span className="text-zinc-600 text-[10px]">Sin GPS</span>
                                                 )}
