@@ -11,6 +11,26 @@ const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
+const ETAPAS = [
+  { id: 'e_medido', label: 'Medido' }, { id: 'e_definido', label: 'Definido' },
+  { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' },
+  { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
+  { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
+];
+
+const contarEtapasMarcadas = (t: any) => ETAPAS.filter(e => t[e.id]).length;
+
+// Pendientes primero; dentro de cada grupo, los que tienen menos etapas
+// marcadas van arriba (así los recién agregados quedan siempre visibles).
+const ordenarTrabajosPorPrioridad = (lista: any[]) => {
+  return [...lista].sort((a, b) => {
+    const aPendiente = a.color_alerta === 'amarillo' ? 0 : 1;
+    const bPendiente = b.color_alerta === 'amarillo' ? 0 : 1;
+    if (aPendiente !== bPendiente) return aPendiente - bPendiente;
+    return contarEtapasMarcadas(a) - contarEtapasMarcadas(b);
+  });
+};
+
 // Correos permitidos (Tuyo y de tu socio)
 const EMAILS_PERMITIDOS = [
   "leandroscolari14@gmail.com",
@@ -553,8 +573,8 @@ export default function DashboardAgrimensura() {
   };
 
   const resumenActual = generarResumen(finanzas);
-  const trabajosLeo = trabajosActivos.filter((t: any) => t.encargado === "Leo");
-  const trabajosBruno = trabajosActivos.filter((t: any) => t.encargado === "Bruno");
+  const trabajosLeo = ordenarTrabajosPorPrioridad(trabajosActivos.filter((t: any) => t.encargado === "Leo"));
+  const trabajosBruno = ordenarTrabajosPorPrioridad(trabajosActivos.filter((t: any) => t.encargado === "Bruno"));
 
   const trabajosFiltrados = trabajosFinalizados.filter((t: any) => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
@@ -629,20 +649,51 @@ export default function DashboardAgrimensura() {
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
   const RenderEtapas = ({ t }: { t: any }) => {
-    const etapas = [
-      { id: 'e_medido', label: 'Medido' }, { id: 'e_definido', label: 'Definido' }, 
-      { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' }, 
-      { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' }, 
-      { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
-    ];
     return (
-      <div className="flex gap-1 flex-nowrap items-center overflow-x-auto py-1">
-        {etapas.map((e: any) => (
+      <div className="flex gap-1 flex-wrap items-center py-1">
+        {ETAPAS.map((e: any) => (
           <button key={e.id} onClick={() => toggleEtapa(t.id, e.id, t[e.id])} title={e.label}
             className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${t[e.id] ? 'bg-[#727A4E] text-white border-[#727A4E]' : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500'}`}>
             {e.label}
           </button>
         ))}
+      </div>
+    );
+  };
+
+  const TarjetaTrabajo = ({ t }: { t: any }) => {
+    const marcadas = contarEtapasMarcadas(t);
+    const esPendiente = t.color_alerta === 'amarillo';
+    return (
+      <div className={`p-4 border-b border-zinc-800 last:border-b-0 hover:bg-[#202020] transition-colors border-l-4 ${esPendiente ? 'border-l-yellow-500' : 'border-l-emerald-500'}`}>
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="lg:w-[24%] min-w-0 shrink-0">
+            <div className={`font-black text-sm flex items-center gap-2 ${esPendiente ? 'text-yellow-400' : 'text-emerald-400'}`}>
+              <span className="truncate">{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
+            </div>
+            <div className="text-zinc-400 font-medium text-xs mt-0.5">{t.estado_detalle}</div>
+            {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 truncate max-w-[240px]">📍 {t.ubicacion}</div>}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div className="h-full bg-[#727A4E] transition-all" style={{ width: `${(marcadas / ETAPAS.length) * 100}%` }}></div>
+              </div>
+              <span className="text-[10px] text-zinc-500 font-bold whitespace-nowrap">{marcadas}/{ETAPAS.length}</span>
+            </div>
+            <RenderEtapas t={t} />
+          </div>
+
+          <div className="flex gap-1.5 items-center flex-nowrap lg:justify-end shrink-0">
+            {!t.e_medido && (
+              <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
+            )}
+            <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded text-white" title="Editar Expediente">✏️</button>
+            <button onClick={() => finalizarTrabajo(t)} className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2 py-1.5 rounded text-emerald-300 font-bold" title="Finalizar">✅</button>
+            <button onClick={() => eliminarTrabajo(t.id)} className="text-xs bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2 py-1.5 rounded text-red-400 font-bold" title="Eliminar">🗑️</button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1209,33 +1260,8 @@ export default function DashboardAgrimensura() {
                   </div>
                   
                   {leoAbierto && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[900px]">
-                        <tbody>
-                          {trabajosLeo.map((t: any) => (
-                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                              <td className="p-3 w-[26%] align-middle">
-                                <div className={`font-black text-sm flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
-                                </div>
-                                <div className="text-zinc-400 font-medium text-xs mt-0.5">{t.estado_detalle}</div>
-                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 truncate max-w-[240px]">📍 {t.ubicacion}</div>}
-                              </td>
-                              <td className="p-3 w-[52%] align-middle"><RenderEtapas t={t} /></td>
-                              <td className="p-3 w-[22%] align-middle text-right">
-                                <div className="flex gap-1.5 justify-end items-center flex-nowrap">
-                                  {!t.e_medido && (
-                                    <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
-                                  )}
-                                  <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded text-white" title="Editar Expediente">✏️</button>
-                                  <button onClick={() => finalizarTrabajo(t)} className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2 py-1.5 rounded text-emerald-300 font-bold" title="Finalizar">✅</button>
-                                  <button onClick={() => eliminarTrabajo(t.id)} className="text-xs bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2 py-1.5 rounded text-red-400 font-bold" title="Eliminar">🗑️</button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div>
+                      {trabajosLeo.map((t: any) => <TarjetaTrabajo key={t.id} t={t} />)}
                     </div>
                   )}
                 </div>
@@ -1248,33 +1274,8 @@ export default function DashboardAgrimensura() {
                   </div>
                   
                   {brunoAbierto && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[900px]">
-                        <tbody>
-                          {trabajosBruno.map((t: any) => (
-                            <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#2A2A2A] transition-colors">
-                              <td className="p-3 w-[26%] align-middle">
-                                <div className={`font-black text-sm flex items-center gap-2 ${t.color_alerta === 'amarillo' ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                  <span>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
-                                </div>
-                                <div className="text-zinc-400 font-medium text-xs mt-0.5">{t.estado_detalle}</div>
-                                {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 truncate max-w-[240px]">📍 {t.ubicacion}</div>}
-                              </td>
-                              <td className="p-3 w-[52%] align-middle"><RenderEtapas t={t} /></td>
-                              <td className="p-3 w-[22%] align-middle text-right">
-                                <div className="flex gap-1.5 justify-end items-center flex-nowrap">
-                                  {!t.e_medido && (
-                                    <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
-                                  )}
-                                  <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded text-white" title="Editar Expediente">✏️</button>
-                                  <button onClick={() => finalizarTrabajo(t)} className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2 py-1.5 rounded text-emerald-300 font-bold" title="Finalizar">✅</button>
-                                  <button onClick={() => eliminarTrabajo(t.id)} className="text-xs bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2 py-1.5 rounded text-red-400 font-bold" title="Eliminar">🗑️</button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div>
+                      {trabajosBruno.map((t: any) => <TarjetaTrabajo key={t.id} t={t} />)}
                     </div>
                   )}
                 </div>
