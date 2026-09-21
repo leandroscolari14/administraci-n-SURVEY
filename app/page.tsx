@@ -64,6 +64,9 @@ export default function DashboardAgrimensura() {
     lng: ""
   });
   const [sugerenciasDireccion, setSugerenciasDireccion] = useState<any[]>([]);
+  const [buscandoDireccion, setBuscandoDireccion] = useState(false);
+  const debounceDireccionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idBusquedaDireccionRef = useRef(0);
 
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
@@ -228,28 +231,50 @@ export default function DashboardAgrimensura() {
     return null;
   };
 
-  const buscarDireccionNominatim = async (query: string) => {
+  // Caja que abarca Santa Fe capital y Santo Tomé (con margen) para priorizar resultados de la zona
+  const VIEWBOX_SANTA_FE_SANTO_TOME = "-60.90,-31.55,-60.55,-31.75";
+
+  const buscarDireccionNominatim = (query: string) => {
     setNuevoTrabajo({ ...nuevoTrabajo, ubicacion: query });
-    
+
+    if (debounceDireccionRef.current) clearTimeout(debounceDireccionRef.current);
+
     const coordsDetectadas = parsearCoordenadasPegadas(query);
     if (coordsDetectadas) {
-      setNuevoTrabajo(prev => ({ 
-        ...prev, 
-        ubicacion: query, 
-        lat: coordsDetectadas.lat, 
-        lng: coordsDetectadas.lng 
+      setNuevoTrabajo(prev => ({
+        ...prev,
+        ubicacion: query,
+        lat: coordsDetectadas.lat,
+        lng: coordsDetectadas.lng
       }));
       setSugerenciasDireccion([]);
       return;
     }
 
-    if (query.length < 3) { setSugerenciasDireccion([]); return; }
-    try {
-      const queryConCiudad = `${query}, Santa Fe, Argentina`;
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryConCiudad)}&countrycodes=ar&limit=5`);
-      const data = await res.json();
-      setSugerenciasDireccion(data);
-    } catch (err) { console.error(err); }
+    if (query.length < 3) { setSugerenciasDireccion([]); setBuscandoDireccion(false); return; }
+
+    setBuscandoDireccion(true);
+    debounceDireccionRef.current = setTimeout(async () => {
+      const idBusqueda = ++idBusquedaDireccionRef.current;
+      try {
+        const buscarCon = (bounded: boolean) =>
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=ar&viewbox=${VIEWBOX_SANTA_FE_SANTO_TOME}${bounded ? "&bounded=1" : ""}&limit=6`)
+            .then(res => res.json());
+
+        let data = await buscarCon(true);
+        if (!data || data.length === 0) {
+          data = await buscarCon(false);
+        }
+
+        if (idBusqueda === idBusquedaDireccionRef.current) {
+          setSugerenciasDireccion(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (idBusqueda === idBusquedaDireccionRef.current) setBuscandoDireccion(false);
+      }
+    }, 400);
   };
 
   const seleccionarSugerencia = (item: any) => {
@@ -1028,8 +1053,11 @@ export default function DashboardAgrimensura() {
                     <span className="absolute right-3 top-3.5 text-zinc-500 pointer-events-none">🔍</span>
                   </div>
 
-                  {sugerenciasDireccion.length > 0 && (
+                  {(sugerenciasDireccion.length > 0 || buscandoDireccion) && (
                     <div className="absolute left-0 right-0 bg-[#1D1D1D] border border-zinc-700 rounded-b-xl shadow-2xl z-50 max-h-56 overflow-y-auto mt-1 divide-y divide-zinc-800">
+                      {buscandoDireccion && sugerenciasDireccion.length === 0 && (
+                        <div className="p-3 text-xs text-zinc-500 italic">Buscando...</div>
+                      )}
                       {sugerenciasDireccion.map((item: any, idx: number) => (
                         <div 
                           key={idx} 
