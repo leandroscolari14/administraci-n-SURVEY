@@ -12,7 +12,7 @@ const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 // Correos permitidos (Tuyo y de tu socio)
 const EMAILS_PERMITIDOS = [
   "leandroscolari14@gmail.com",
-  "brunoverga13@gmail.com" // Reemplazá por el mail de Bruno si es diferente
+  "brunoverga13@gmail.com"
 ];
 
 export default function DashboardAgrimensura() {
@@ -114,10 +114,7 @@ export default function DashboardAgrimensura() {
 
   const iniciarSesionGoogle = async () => {
     await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
+      provider: 'google'
     });
   };
 
