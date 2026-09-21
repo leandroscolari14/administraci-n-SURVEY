@@ -70,6 +70,10 @@ export default function DashboardAgrimensura() {
   const debounceDireccionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idBusquedaDireccionRef = useRef(0);
 
+  const [partidaInput, setPartidaInput] = useState("");
+  const [buscandoPartida, setBuscandoPartida] = useState(false);
+  const [errorPartida, setErrorPartida] = useState("");
+
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
   const [trabajoResaltadoId, setTrabajoResaltadoId] = useState<string | null>(null);
@@ -289,6 +293,92 @@ export default function DashboardAgrimensura() {
     setSugerenciasDireccion([]);
   };
 
+  const formatearPartidaInput = (valorCrudo: string) => {
+    const val = valorCrudo.replace(/\D/g, "").substring(0, 16);
+    let formatted = "";
+    if (val.length > 0) formatted += val.slice(0, 2);
+    if (val.length > 2) formatted += "-" + val.slice(2, 4);
+    if (val.length > 4) formatted += "-" + val.slice(4, 6);
+    if (val.length > 6) formatted += " " + val.slice(6, 12);
+    if (val.length > 12) formatted += "/" + val.slice(12, 16);
+    return formatted;
+  };
+
+  // Parsea el HTML de respuesta del SCIT para sacar la ubicación y el
+  // id de parcela de 15 dígitos (distrito+sección+manzana+parcela).
+  const parsearHTMLCatastro = (html: string) => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const result: any = { generales: {}, parcelas: [] as any[] };
+
+    doc.querySelectorAll("table").forEach((table) => {
+      const textoTabla = table.textContent || "";
+      const filas = Array.from(table.querySelectorAll("tbody tr"));
+      if (!filas.length) return;
+
+      if (/DATOS GENERALES DE LA PARTIDA/i.test(textoTabla)) {
+        let dataRow = filas[0];
+        for (const f of filas) {
+          if (f.children[0] && /^\d{2}-\d{2}-\d{2}/.test(f.children[0].textContent?.trim() || "")) { dataRow = f; break; }
+        }
+        const val = Array.from(dataRow.children).map((c) => c.textContent?.trim() || "");
+        ["Partida", "Estado", "Ubicación", "Zona", "Sup. Terreno", "Sup. Edificación"].forEach((k, i) => { result.generales[k] = val[i] || ""; });
+      }
+
+      if (/DATOS DE PARCELAS POR PARTIDA/i.test(textoTabla)) {
+        filas.forEach((fila) => {
+          const val = Array.from(fila.children).map((c) => c.textContent?.trim() || "");
+          const rawParcela = val[0] ? val[0].replace(/[^a-zA-Z0-9]/g, "") : "";
+          if (rawParcela.length >= 15) {
+            result.parcelas.push({ parcela: val[0], base15: rawParcela.substring(0, 15) });
+          }
+        });
+      }
+    });
+
+    return result;
+  };
+
+  const buscarUbicacionPorPartida = async () => {
+    const digitos = partidaInput.replace(/\D/g, "");
+    if (digitos.length < 16) { setErrorPartida("Ingresá la partida completa (16 dígitos)."); return; }
+
+    setErrorPartida("");
+    setBuscandoPartida(true);
+    try {
+      const respPartida = await fetch(`/api/partida?partida=${encodeURIComponent(digitos)}`);
+      const rawData = await respPartida.json();
+      if (!respPartida.ok || !rawData.html) throw new Error(rawData.error || "No se pudo consultar la partida.");
+      if (rawData.html.includes("La partida no existe")) throw new Error("La partida no existe en los registros del SCIT.");
+
+      const data = parsearHTMLCatastro(rawData.html);
+      if (data.parcelas.length === 0 || !data.parcelas[0].base15) throw new Error("No se encontró la parcela asociada a esa partida.");
+
+      const idParcela15 = data.parcelas[0].base15;
+      const respCoords = await fetch(`/api/coordenadas?idParcela=${idParcela15}`);
+      const dataCoords = await respCoords.json();
+      if (!respCoords.ok) throw new Error(dataCoords.error || "No se pudo obtener la ubicación de la parcela.");
+
+      let lat: number | undefined, lng: number | undefined;
+      if (dataCoords.centro && Array.isArray(dataCoords.centro) && dataCoords.centro.length === 2) {
+        lat = parseFloat(dataCoords.centro[0]);
+        lng = parseFloat(dataCoords.centro[1]);
+      } else if (dataCoords.extent && Array.isArray(dataCoords.extent) && dataCoords.extent.length === 4) {
+        const [n1, n2, n3, n4] = dataCoords.extent.map((n: any) => parseFloat(n));
+        if (n1 > -40 && n1 < -20) { lat = (n1 + n3) / 2; lng = (n2 + n4) / 2; } else { lng = (n1 + n3) / 2; lat = (n2 + n4) / 2; }
+      }
+
+      if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) throw new Error("IDESF no devolvió coordenadas válidas.");
+
+      const ubicacionTexto = data.generales["Ubicación"] || `Partida ${digitos}`;
+      setNuevoTrabajo((prev) => ({ ...prev, ubicacion: ubicacionTexto, lat: String(lat), lng: String(lng) }));
+      setSugerenciasDireccion([]);
+    } catch (err: any) {
+      setErrorPartida(err.message || "Error al buscar la partida.");
+    } finally {
+      setBuscandoPartida(false);
+    }
+  };
+
   const guardarTrabajo = async (e: any) => {
     e.preventDefault();
     const datosGuardar: any = {
@@ -315,6 +405,8 @@ export default function DashboardAgrimensura() {
     }
     
     setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" });
+    setPartidaInput("");
+    setErrorPartida("");
     cargarDatos();
   };
 
@@ -1047,6 +1139,28 @@ export default function DashboardAgrimensura() {
                   </div>
                 </div>
 
+                {/* BUSCADOR POR PARTIDA CATASTRAL (SCIT + IDESF) */}
+                <div>
+                  <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E] block mb-1">Partida Catastral (opcional — autocompleta la ubicación)</label>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]"
+                      value={partidaInput}
+                      onChange={e => setPartidaInput(formatearPartidaInput(e.target.value))}
+                      placeholder="Ej: 01-01-01 123456/0000"
+                    />
+                    <button
+                      type="button"
+                      onClick={buscarUbicacionPorPartida}
+                      disabled={buscandoPartida}
+                      className="px-4 py-2 rounded-md font-bold text-xs uppercase tracking-wider bg-[#727A4E] hover:bg-[#8B9461] disabled:opacity-60 text-white whitespace-nowrap"
+                    >
+                      {buscandoPartida ? "Buscando..." : "Buscar"}
+                    </button>
+                  </div>
+                  {errorPartida && <p className="text-red-400 text-xs font-bold mt-1">{errorPartida}</p>}
+                </div>
+
                 {/* BUSCADOR INTELIGENTE TIPO MAPS */}
                 <div className="relative">
                   <label className="text-xs uppercase tracking-wider font-bold text-[#727A4E] block mb-1">Ubicación (Buscador inteligente o pegá coordenadas ej: -31.63, -60.70)</label>
@@ -1080,7 +1194,7 @@ export default function DashboardAgrimensura() {
                 </div>
 
                 <div className="flex justify-end gap-2 mt-2">
-                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" });}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
+                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" }); setPartidaInput(""); setErrorPartida("");}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
                   <button type="submit" className={`px-8 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar Cambios" : "Agregar Expediente"}</button>
                 </div>
               </form>
