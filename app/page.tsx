@@ -12,7 +12,7 @@ const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
 const ETAPAS_BASE = [
-  { id: 'e_medido', label: 'Medido' }, { id: 'e_definido', label: 'Definido' },
+  { id: 'e_medido', label: 'Medido' }, { id: 'e_aportes_pagados', label: 'Aportes Pagados' }, { id: 'e_definido', label: 'Definido' },
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' },
   { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
   { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
