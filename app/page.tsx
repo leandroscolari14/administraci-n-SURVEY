@@ -549,9 +549,12 @@ export default function DashboardAgrimensura() {
       urlComprobanteFinal = publicUrlData.publicUrl;
     }
 
-    const fechaLiquidacionActual = new Date().toISOString();
+    // Si la semana fue reabierta, sus registros conservan la fecha de liquidación original: se reutiliza.
+    const fechaOriginal = finanzas.find((f: any) => f.fecha_liquidacion)?.fecha_liquidacion;
+    const datosLiquidar: any = { liquidado: true, fecha_liquidacion: fechaOriginal || new Date().toISOString() };
+    if (urlComprobanteFinal) datosLiquidar.comprobante_url = urlComprobanteFinal;
     const ids = finanzas.map((f: any) => f.id);
-    const { error } = await supabase.from("finanzas").update({ liquidado: true, fecha_liquidacion: fechaLiquidacionActual, comprobante_url: urlComprobanteFinal }).in("id", ids);
+    const { error } = await supabase.from("finanzas").update(datosLiquidar).in("id", ids);
 
     if (error) { alert(`Error al liquidar: ${error.message}`); return; }
 
@@ -567,7 +570,7 @@ export default function DashboardAgrimensura() {
     alert("¡Semana liquidada y respaldada con éxito!");
   };
 
-  const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false, fecha_liquidacion: null }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setSubTabFinanzas("actual"); } };
+  const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setSubTabFinanzas("actual"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
   const calcularPartes = (f: any) => {
