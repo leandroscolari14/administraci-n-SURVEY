@@ -6,9 +6,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const telegramBotToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "";
-const telegramChatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || "";
-
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
 const ETAPAS_BASE = [
@@ -212,24 +209,16 @@ export default function DashboardAgrimensura() {
   };
 
   const enviarTelegram = async (mensaje: string, fotoUrl?: string) => {
-    if (!telegramBotToken || !telegramChatId) return;
-    if (fotoUrl) {
-      try {
-        await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendPhoto`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: telegramChatId, photo: fotoUrl, caption: mensaje, parse_mode: "Markdown" })
-        });
-      } catch (error) { console.error(error); }
-    } else {
-      try {
-        await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: telegramChatId, text: mensaje, parse_mode: "Markdown" })
-        });
-      } catch (error) { console.error(error); }
-    }
+    try {
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return;
+      await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ mensaje, fotoUrl })
+      });
+    } catch (error) { console.error(error); }
   };
 
   const tomarCatastro = async (nombre: string) => {
