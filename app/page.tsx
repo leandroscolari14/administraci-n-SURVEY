@@ -15,20 +15,28 @@ const ETAPAS_BASE = [
   { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
 ];
 
-// "Solicitado LD" solo aplica a VEP/REP. "CC Emitido" solo aplica a
-// VEP/REP/CCU; el resto de los trámites terminan en "Registrado".
 const ETAPAS_FAC = [
   { id: 'e_medido', label: 'Medido' }, { id: 'e_dibujado', label: 'Dibujado' },
   { id: 'e_iniciado', label: 'Iniciado' }, { id: 'e_aprobado', label: 'Aprobado' }
 ];
 
+// FAC tiene sus propias etapas. En el resto: "Solicitado LD" solo en VEP/REP;
+// "Pedido CC" y "CC Emitido" solo en VEP/REP/CCU (los demás terminan en "Registrado");
+// "Visado" (antes de Aprobado) en unificación, división y PH.
 const obtenerEtapasParaTrabajo = (t: any) => {
   const tipo = (t.tipo || '').trim().toUpperCase();
   if (tipo === 'FAC') return ETAPAS_FAC;
   const esVepRep = tipo.includes('VEP') || tipo.includes('REP');
   const tieneCC = esVepRep || tipo.includes('CCU');
+  const llevaVisado = tipo.includes('UNIFICA') || tipo.includes('DIV') || tipo.includes('PH');
 
-  let etapas = ETAPAS_BASE.filter(e => e.id !== 'e_solicitado_ld' || esVepRep);
+  let etapas = ETAPAS_BASE.filter(e =>
+    (e.id !== 'e_solicitado_ld' || esVepRep) && (e.id !== 'e_pedido_cc' || tieneCC)
+  );
+  if (llevaVisado) {
+    const posAprobado = etapas.findIndex(e => e.id === 'e_aprobado');
+    etapas = [...etapas.slice(0, posAprobado), { id: 'e_visado', label: 'Visado' }, ...etapas.slice(posAprobado)];
+  }
   if (!tieneCC) {
     etapas = etapas.filter(e => e.id !== 'e_cc_emitido').concat([{ id: 'e_registrado', label: 'Registrado' }]);
   }
