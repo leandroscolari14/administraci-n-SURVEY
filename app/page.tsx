@@ -43,7 +43,11 @@ const obtenerEtapasParaTrabajo = (t: any) => {
   return etapas;
 };
 
-const contarEtapasMarcadas = (t: any) => obtenerEtapasParaTrabajo(t).filter(e => t[e.id]).length;
+// FAC tiene 3 fases: 0 sin tocar, 1 iniciado (e_fac), 2 aprobado (e_fac + e_fac_aprobado).
+const faseFac = (t: any) => (!t.e_fac ? 0 : t.e_fac_aprobado ? 2 : 1);
+const etapaCompleta = (t: any, id: string) => (id === 'e_fac' ? faseFac(t) === 2 : !!t[id]);
+
+const contarEtapasMarcadas = (t: any) => obtenerEtapasParaTrabajo(t).filter(e => etapaCompleta(t, e.id)).length;
 
 // Pendientes primero; dentro de cada grupo, los que tienen menos etapas
 // marcadas van arriba (así los recién agregados quedan siempre visibles).
@@ -479,6 +483,13 @@ export default function DashboardAgrimensura() {
     await supabase.from("trabajos_curso").update({ [etapa]: !valorActual }).eq("id", id);
   };
 
+  const ciclarFac = async (t: any) => {
+    const fase = (faseFac(t) + 1) % 3;
+    const cambios = { e_fac: fase > 0, e_fac_aprobado: fase === 2 };
+    setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, ...cambios } : x));
+    await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
+  };
+
   const guardarEdicionRapidaDash = async (e: any) => {
     e.preventDefault();
     if (!trabajoEditandoDash) return;
@@ -678,12 +689,22 @@ export default function DashboardAgrimensura() {
     const etapas = obtenerEtapasParaTrabajo(t);
     return (
       <div className="flex gap-1 flex-wrap items-center py-1">
-        {etapas.map((e: any) => (
-          <button key={e.id} onClick={() => toggleEtapa(t.id, e.id, t[e.id])} title={e.label}
-            className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${t[e.id] ? 'bg-[#727A4E] text-white border-[#727A4E]' : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500'}`}>
-            {e.label}
-          </button>
-        ))}
+        {etapas.map((e: any) => {
+          const esFac = e.id === 'e_fac';
+          const fase = esFac ? faseFac(t) : (t[e.id] ? 2 : 0);
+          const colores = fase === 2
+            ? 'bg-[#727A4E] text-white border-[#727A4E]'
+            : fase === 1
+              ? 'bg-[#A4B070] text-[#1A1A1A] border-[#A4B070]'
+              : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500';
+          return (
+            <button key={e.id} onClick={() => esFac ? ciclarFac(t) : toggleEtapa(t.id, e.id, t[e.id])}
+              title={esFac ? ['FAC: sin iniciar', 'FAC: iniciado', 'FAC: aprobado'][fase] : e.label}
+              className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${colores}`}>
+              {e.label}
+            </button>
+          );
+        })}
       </div>
     );
   };
