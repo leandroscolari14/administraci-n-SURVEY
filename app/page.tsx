@@ -106,6 +106,12 @@ export default function DashboardAgrimensura() {
   
   const [trabajosActivos, setTrabajosActivos] = useState<any[]>([]);
   const [ordenTrabajos, setOrdenTrabajos] = useState<string[]>([]);
+  const [notaEditando, setNotaEditando] = useState<{ id: string; valor: string } | null>(null);
+  const notaEditandoRef = useRef<{ id: string; valor: string } | null>(null);
+  const editarNota = (nota: { id: string; valor: string } | null) => {
+    notaEditandoRef.current = nota;
+    setNotaEditando(nota);
+  };
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
@@ -493,6 +499,20 @@ export default function DashboardAgrimensura() {
     }, 100);
   };
 
+  const guardarNotaInline = async (t: any) => {
+    const actual = notaEditandoRef.current;
+    if (!actual || actual.id !== t.id) return;
+    const nueva = actual.valor.trim();
+    editarNota(null);
+    if (nueva === (t.estado_detalle || "")) return;
+    setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, estado_detalle: nueva } : x));
+    const { error } = await supabase.from("trabajos_curso").update({ estado_detalle: nueva }).eq("id", t.id);
+    if (error) {
+      setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, estado_detalle: t.estado_detalle } : x));
+      alert(`No se pudo guardar la nota: ${error.message}`);
+    }
+  };
+
   const toggleEtapa = async (id: string, etapa: string, valorActual: boolean) => {
     setTrabajosActivos(prev => prev.map(t => t.id === id ? { ...t, [etapa]: !valorActual } : t));
     await supabase.from("trabajos_curso").update({ [etapa]: !valorActual }).eq("id", id);
@@ -730,6 +750,7 @@ export default function DashboardAgrimensura() {
     const totalEtapas = obtenerEtapasParaTrabajo(t).length;
     const marcadas = contarEtapasMarcadas(t);
     const esPendiente = t.color_alerta === 'amarillo';
+    const notaDeEsta = notaEditando && notaEditando.id === t.id ? notaEditando : null;
     return (
       <div key={t.id} className={`p-4 border-b border-zinc-800 last:border-b-0 hover:bg-[#202020] transition-colors border-l-4 ${esPendiente ? 'border-l-yellow-500' : 'border-l-emerald-500'}`}>
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
@@ -737,7 +758,29 @@ export default function DashboardAgrimensura() {
             <div className={`font-black text-sm flex items-center gap-2 ${esPendiente ? 'text-yellow-400' : 'text-emerald-400'}`}>
               <span className="truncate">{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</span>
             </div>
-            <div className="text-zinc-400 font-medium text-xs mt-0.5">{t.estado_detalle}</div>
+            {notaDeEsta ? (
+              <input
+                autoFocus
+                value={notaDeEsta.valor}
+                onChange={e => editarNota({ id: t.id, valor: e.target.value })}
+                onFocus={e => e.currentTarget.select()}
+                onBlur={() => guardarNotaInline(t)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                  if (e.key === 'Escape') editarNota(null);
+                }}
+                className="w-full mt-0.5 bg-[#111111] border border-[#727A4E] rounded px-1.5 py-1 text-xs font-medium text-zinc-200 focus:outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => editarNota({ id: t.id, valor: t.estado_detalle || "" })}
+                title="Tocá para editar la nota"
+                className="block w-full text-left rounded px-1 -mx-1 mt-0.5 text-xs font-medium text-zinc-400 hover:bg-zinc-800/60 cursor-text"
+              >
+                {t.estado_detalle || <span className="italic text-zinc-600">+ agregar nota</span>}
+              </button>
+            )}
             {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 truncate max-w-[240px]">📍 {t.ubicacion}</div>}
           </div>
 
