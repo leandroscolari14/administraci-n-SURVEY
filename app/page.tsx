@@ -60,6 +60,13 @@ const ordenarTrabajosPorPrioridad = (lista: any[]) => {
   });
 };
 
+// El orden se calcula al cargar los datos y no se recalcula al tocar una etapa,
+// para que la tarjeta no se mueva de lugar mientras se la está marcando.
+const ordenarSegunIds = (lista: any[], ids: string[]) => {
+  const posicion = new Map(ids.map((id, i) => [id, i]));
+  return [...lista].sort((a, b) => (posicion.get(a.id) ?? -1) - (posicion.get(b.id) ?? -1));
+};
+
 // Correos permitidos (Tuyo y de tu socio)
 const EMAILS_PERMITIDOS = [
   "leandroscolari14@gmail.com",
@@ -92,6 +99,7 @@ export default function DashboardAgrimensura() {
   const [semanasAbiertas, setSemanasAbiertas] = useState<Record<string, boolean>>({});
   
   const [trabajosActivos, setTrabajosActivos] = useState<any[]>([]);
+  const [ordenTrabajos, setOrdenTrabajos] = useState<string[]>([]);
   const [trabajosFinalizados, setTrabajosFinalizados] = useState<any[]>([]);
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
@@ -219,6 +227,7 @@ export default function DashboardAgrimensura() {
       const activos = dataTrabajos.filter((t: any) => t.finalizado === false || t.finalizado === null);
       const finalizados = dataTrabajos.filter((t: any) => t.finalizado === true);
       setTrabajosActivos(activos);
+      setOrdenTrabajos(ordenarTrabajosPorPrioridad(activos).map((t: any) => t.id));
       setTrabajosFinalizados(finalizados);
     }
     if (dataFinanzas) setFinanzas(dataFinanzas);
@@ -610,8 +619,8 @@ export default function DashboardAgrimensura() {
   };
 
   const resumenActual = generarResumen(finanzas);
-  const trabajosLeo = ordenarTrabajosPorPrioridad(trabajosActivos.filter((t: any) => t.encargado === "Leo"));
-  const trabajosBruno = ordenarTrabajosPorPrioridad(trabajosActivos.filter((t: any) => t.encargado === "Bruno"));
+  const trabajosLeo = ordenarSegunIds(trabajosActivos.filter((t: any) => t.encargado === "Leo"), ordenTrabajos);
+  const trabajosBruno = ordenarSegunIds(trabajosActivos.filter((t: any) => t.encargado === "Bruno"), ordenTrabajos);
 
   const trabajosFiltrados = trabajosFinalizados.filter((t: any) => {
     const coincideEncargado = filtroEncargado === "Todos" || t.encargado === filtroEncargado;
@@ -685,7 +694,9 @@ export default function DashboardAgrimensura() {
   const toggleMesFinanzas = (key: string) => setMesesFinanzasAbiertos({ ...mesesFinanzasAbiertos, [key]: !mesesFinanzasAbiertos[key] });
   const toggleHistorial = (fechaKey: string) => setSemanasAbiertas({ ...semanasAbiertas, [fechaKey]: !semanasAbiertas[fechaKey] });
 
-  const RenderEtapas = ({ t }: { t: any }) => {
+  // renderEtapas y renderTarjetaTrabajo son funciones y no componentes: definidos acá adentro,
+  // React los recrearía en cada render y la pantalla saltaría arriba al hacer clic.
+  const renderEtapas = (t: any) => {
     const etapas = obtenerEtapasParaTrabajo(t);
     return (
       <div className="flex gap-1 flex-wrap items-center py-1">
@@ -709,12 +720,12 @@ export default function DashboardAgrimensura() {
     );
   };
 
-  const TarjetaTrabajo = ({ t }: { t: any }) => {
+  const renderTarjetaTrabajo = (t: any) => {
     const totalEtapas = obtenerEtapasParaTrabajo(t).length;
     const marcadas = contarEtapasMarcadas(t);
     const esPendiente = t.color_alerta === 'amarillo';
     return (
-      <div className={`p-4 border-b border-zinc-800 last:border-b-0 hover:bg-[#202020] transition-colors border-l-4 ${esPendiente ? 'border-l-yellow-500' : 'border-l-emerald-500'}`}>
+      <div key={t.id} className={`p-4 border-b border-zinc-800 last:border-b-0 hover:bg-[#202020] transition-colors border-l-4 ${esPendiente ? 'border-l-yellow-500' : 'border-l-emerald-500'}`}>
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="lg:w-[24%] min-w-0 shrink-0">
             <div className={`font-black text-sm flex items-center gap-2 ${esPendiente ? 'text-yellow-400' : 'text-emerald-400'}`}>
@@ -731,7 +742,7 @@ export default function DashboardAgrimensura() {
               </div>
               <span className="text-[10px] text-zinc-500 font-bold whitespace-nowrap">{marcadas}/{totalEtapas}</span>
             </div>
-            <RenderEtapas t={t} />
+            {renderEtapas(t)}
           </div>
 
           <div className="flex gap-1.5 items-center flex-nowrap lg:justify-end shrink-0">
@@ -1310,7 +1321,7 @@ export default function DashboardAgrimensura() {
                   
                   {leoAbierto && (
                     <div>
-                      {trabajosLeo.map((t: any) => <TarjetaTrabajo key={t.id} t={t} />)}
+                      {trabajosLeo.map((t: any) => renderTarjetaTrabajo(t))}
                     </div>
                   )}
                 </div>
@@ -1324,7 +1335,7 @@ export default function DashboardAgrimensura() {
                   
                   {brunoAbierto && (
                     <div>
-                      {trabajosBruno.map((t: any) => <TarjetaTrabajo key={t.id} t={t} />)}
+                      {trabajosBruno.map((t: any) => renderTarjetaTrabajo(t))}
                     </div>
                   )}
                 </div>
