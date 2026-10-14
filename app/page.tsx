@@ -43,9 +43,15 @@ const obtenerEtapasParaTrabajo = (t: any) => {
   return etapas;
 };
 
-// FAC tiene 3 fases: 0 sin tocar, 1 iniciado (e_fac), 2 aprobado (e_fac + e_fac_aprobado).
-const faseFac = (t: any) => (!t.e_fac ? 0 : t.e_fac_aprobado ? 2 : 1);
-const etapaCompleta = (t: any, id: string) => (id === 'e_fac' ? faseFac(t) === 2 : !!t[id]);
+// FAC y Visado tienen 3 fases: 0 sin tocar, 1 iniciado (la columna de la etapa),
+// 2 aprobado (la columna de la etapa + su columna de aprobado).
+const COLUMNA_APROBADO: Record<string, string> = { e_fac: 'e_fac_aprobado', e_visado: 'e_visado_aprobado' };
+const faseEtapa = (t: any, id: string) => {
+  const aprobado = COLUMNA_APROBADO[id];
+  if (!aprobado) return t[id] ? 2 : 0;
+  return !t[id] ? 0 : t[aprobado] ? 2 : 1;
+};
+const etapaCompleta = (t: any, id: string) => faseEtapa(t, id) === 2;
 
 const contarEtapasMarcadas = (t: any) => obtenerEtapasParaTrabajo(t).filter(e => etapaCompleta(t, e.id)).length;
 
@@ -492,9 +498,9 @@ export default function DashboardAgrimensura() {
     await supabase.from("trabajos_curso").update({ [etapa]: !valorActual }).eq("id", id);
   };
 
-  const ciclarFac = async (t: any) => {
-    const fase = (faseFac(t) + 1) % 3;
-    const cambios = { e_fac: fase > 0, e_fac_aprobado: fase === 2 };
+  const ciclarEtapaTresFases = async (t: any, id: string) => {
+    const fase = (faseEtapa(t, id) + 1) % 3;
+    const cambios = { [id]: fase > 0, [COLUMNA_APROBADO[id]]: fase === 2 };
     setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, ...cambios } : x));
     await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
   };
@@ -701,16 +707,16 @@ export default function DashboardAgrimensura() {
     return (
       <div className="flex gap-1 flex-wrap items-center py-1">
         {etapas.map((e: any) => {
-          const esFac = e.id === 'e_fac';
-          const fase = esFac ? faseFac(t) : (t[e.id] ? 2 : 0);
+          const tresFases = e.id in COLUMNA_APROBADO;
+          const fase = faseEtapa(t, e.id);
           const colores = fase === 2
             ? 'bg-[#727A4E] text-white border-[#727A4E]'
             : fase === 1
               ? 'bg-transparent text-[#A4B070] border-[#A4B070] ring-1 ring-inset ring-[#A4B070]'
               : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500';
           return (
-            <button key={e.id} onClick={() => esFac ? ciclarFac(t) : toggleEtapa(t.id, e.id, t[e.id])}
-              title={esFac ? ['FAC: sin iniciar', 'FAC: iniciado', 'FAC: aprobado'][fase] : e.label}
+            <button key={e.id} onClick={() => tresFases ? ciclarEtapaTresFases(t, e.id) : toggleEtapa(t.id, e.id, t[e.id])}
+              title={tresFases ? `${e.label}: ${['sin iniciar', 'iniciado', 'aprobado'][fase]}` : e.label}
               className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${colores}`}>
               {e.label}
             </button>
