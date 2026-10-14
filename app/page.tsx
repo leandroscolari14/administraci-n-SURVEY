@@ -695,7 +695,7 @@ export default function DashboardAgrimensura() {
           const colores = fase === 2
             ? 'bg-[#727A4E] text-white border-[#727A4E]'
             : fase === 1
-              ? 'bg-[#A4B070] text-[#1A1A1A] border-[#A4B070]'
+              ? 'bg-transparent text-[#A4B070] border-[#A4B070] ring-1 ring-inset ring-[#A4B070]'
               : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500';
           return (
             <button key={e.id} onClick={() => esFac ? ciclarFac(t) : toggleEtapa(t.id, e.id, t[e.id])}
