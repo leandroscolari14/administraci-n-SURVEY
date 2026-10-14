@@ -17,8 +17,14 @@ const ETAPAS_BASE = [
 
 // "Solicitado LD" solo aplica a VEP/REP. "CC Emitido" solo aplica a
 // VEP/REP/CCU; el resto de los trámites terminan en "Registrado".
+const ETAPAS_FAC = [
+  { id: 'e_medido', label: 'Medido' }, { id: 'e_dibujado', label: 'Dibujado' },
+  { id: 'e_iniciado', label: 'Iniciado' }, { id: 'e_aprobado', label: 'Aprobado' }
+];
+
 const obtenerEtapasParaTrabajo = (t: any) => {
   const tipo = (t.tipo || '').trim().toUpperCase();
+  if (tipo === 'FAC') return ETAPAS_FAC;
   const esVepRep = tipo.includes('VEP') || tipo.includes('REP');
   const tieneCC = esVepRep || tipo.includes('CCU');
 
