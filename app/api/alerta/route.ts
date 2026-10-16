@@ -32,8 +32,12 @@ export async function GET() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     chat_id: telegramChatId,
-                    text: `⚠️ *ALERTA: SCIT OLVIDADO*\n\nChe **${catastro.usuario}**, llevás más de ${horas} hora(s) con Catastro en uso. \n\n¿Te lo olvidaste abierto? Si ya no lo usás, acordate de entrar al panel a liberar el sistema.`,
-                    parse_mode: "Markdown"
+                    text: `⚠️ *ALERTA: SCIT OLVIDADO*\n\nChe **${catastro.usuario}**, llevás más de ${horas} hora(s) con Catastro en uso. \n\n¿Te lo olvidaste abierto? Si ya no lo usás, tocá el botón o acordate de entrar al panel a liberar el sistema.`,
+                    parse_mode: "Markdown",
+                    // El botón solo aparece si el bot ya está configurado para recibir la orden.
+                    ...(process.env.TELEGRAM_WEBHOOK_SECRET
+                        ? { reply_markup: { inline_keyboard: [[{ text: "🟢 Liberar ahora", callback_data: "liberar" }]] } }
+                        : {})
                 })
             });
             
