@@ -146,9 +146,10 @@ export async function POST(req: NextRequest) {
     if (!enUso) {
       await responder('El SCIT ya estaba libre 🟢');
     } else {
+      const ahora = new Date().toISOString();
       const { error: errorUpdate } = await supabase
         .from('estado_catastro')
-        .update({ usuario: 'Libre', fecha_actualizacion: new Date().toISOString() })
+        .update({ usuario: 'Libre', fecha_actualizacion: ahora, liberado_por: nombre, fecha_liberacion: ahora })
         .eq('id', 1);
       if (errorUpdate) await responder('No pude guardar el cambio. Probá de nuevo.');
       else {

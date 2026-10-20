@@ -79,6 +79,11 @@ const EMAILS_PERMITIDOS = [
   "brunoverga13@gmail.com"
 ];
 
+const NOMBRE_POR_EMAIL: Record<string, string> = {
+  "leandroscolari14@gmail.com": "Leo",
+  "brunoverga13@gmail.com": "Bruno"
+};
+
 export default function DashboardAgrimensura() {
   const [session, setSession] = useState<any>(null);
   const [cargandoAuth, setCargandoAuth] = useState(true);
@@ -116,7 +121,7 @@ export default function DashboardAgrimensura() {
   const [finanzas, setFinanzas] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[]>([]);
   
-  const [catastro, setCatastro] = useState({ usuario: "Libre", fecha: "" });
+  const [catastro, setCatastro] = useState({ usuario: "Libre", fecha: "", liberadoPor: "", fechaLiberacion: "" });
   const [tiempoUso, setTiempoUso] = useState("");
   
   const [archivoComprobante, setArchivoComprobante] = useState<File | null>(null);
@@ -244,7 +249,12 @@ export default function DashboardAgrimensura() {
     }
     if (dataFinanzas) setFinanzas(dataFinanzas);
     if (dataHistorial) setHistorial(dataHistorial);
-    if (dataCatastro && dataCatastro.length > 0) setCatastro({ usuario: dataCatastro[0].usuario, fecha: dataCatastro[0].fecha_actualizacion });
+    if (dataCatastro && dataCatastro.length > 0) setCatastro({
+      usuario: dataCatastro[0].usuario,
+      fecha: dataCatastro[0].fecha_actualizacion,
+      liberadoPor: dataCatastro[0].liberado_por || "",
+      fechaLiberacion: dataCatastro[0].fecha_liberacion || ""
+    });
   };
 
   const enviarTelegram = async (mensaje: string, fotoUrl?: string) => {
@@ -268,7 +278,14 @@ export default function DashboardAgrimensura() {
   };
 
   const liberarCatastro = async () => {
-    await supabase.from("estado_catastro").update({ usuario: "Libre", fecha_actualizacion: new Date().toISOString() }).eq("id", 1);
+    const ahora = new Date().toISOString();
+    const email = session?.user?.email || "";
+    await supabase.from("estado_catastro").update({
+      usuario: "Libre",
+      fecha_actualizacion: ahora,
+      liberado_por: NOMBRE_POR_EMAIL[email] || email,
+      fecha_liberacion: ahora
+    }).eq("id", 1);
     cargarDatos();
     await enviarTelegram(`🟢 *SISTEMA LIBERADO*\n\nEl sistema SCIT ya está disponible nuevamente.`);
   };
@@ -1510,6 +1527,11 @@ export default function DashboardAgrimensura() {
             </div>
             {catastro.usuario !== "Libre" && (
               <div className="text-lg md:text-xl font-bold text-zinc-800 mb-8 bg-white/70 py-3 px-6 rounded-xl shadow-sm inline-block">⏱️ Tiempo: <span className="text-red-600 block sm:inline">{tiempoUso}</span></div>
+            )}
+            {catastro.fechaLiberacion && (
+              <div className="text-sm md:text-base font-semibold text-zinc-700 mb-6">
+                🔓 Última liberación: {new Date(catastro.fechaLiberacion).toLocaleString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })} hs{catastro.liberadoPor ? ` · por ${catastro.liberadoPor}` : ""}
+              </div>
             )}
             <div className="flex flex-col sm:flex-row gap-4 justify-center mt-4">
               {catastro.usuario === "Libre" ? (
