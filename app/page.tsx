@@ -70,6 +70,8 @@ const ordenarTrabajosPorPrioridad = (lista: any[]) => {
   });
 };
 
+const normalizarTexto = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 // El orden se calcula al cargar los datos y no se recalcula al tocar una etapa,
 // para que la tarjeta no se mueva de lugar mientras se la está marcando.
 const ordenarSegunIds = (lista: any[], ids: string[]) => {
@@ -166,6 +168,8 @@ export default function DashboardAgrimensura() {
   const [filtroAnioDashboard, setFiltroAnioDashboard] = useState("Todos");
   const [filtroSocioDashboard, setFiltroSocioDashboard] = useState("Todos");
   const [filtroTipoDashboard, setFiltroTipoDashboard] = useState("Todos");
+  const [busquedaDashboard, setBusquedaDashboard] = useState("");
+  const estabaBuscandoRef = useRef(false);
 
   // Referencias para Leaflet (Mapa persistente)
   const mapInstanceRef = useRef<any>(null);
@@ -833,9 +837,13 @@ export default function DashboardAgrimensura() {
       const coincideAnio = filtroAnioDashboard === "Todos" || (t.fecha_finalizacion && t.fecha_finalizacion.startsWith(filtroAnioDashboard));
       const coincideSocio = filtroSocioDashboard === "Todos" || t.encargado === filtroSocioDashboard;
       const coincideTipo = filtroTipoDashboard === "Todos" || (t.tipo && t.tipo.trim().toUpperCase() === filtroTipoDashboard.toUpperCase());
-      return coincideAnio && coincideSocio && coincideTipo;
+      const palabras = normalizarTexto(busquedaDashboard).split(/\s+/).filter(Boolean);
+      const propietario = normalizarTexto(t.propietario || t.nombre_expediente || '');
+      const coincideBusqueda = palabras.every(p => propietario.includes(p));
+      return coincideAnio && coincideSocio && coincideTipo && coincideBusqueda;
     });
-  }, [trabajosFinalizados, filtroAnioDashboard, filtroSocioDashboard, filtroTipoDashboard]);
+  }, [trabajosFinalizados, filtroAnioDashboard, filtroSocioDashboard, filtroTipoDashboard, busquedaDashboard]);
+  const buscandoDashboard = busquedaDashboard.trim() !== "";
 
   const totalTrabajosDash = listaTrabajosParaDashboard.length;
   const cantLeoDash = listaTrabajosParaDashboard.filter((t: any) => t.encargado === "Leo").length;
@@ -954,8 +962,10 @@ export default function DashboardAgrimensura() {
         markersLayerRef.current.clearLayers();
         mapMarkersMapRef.current.clear();
 
+        const puntosBuscados: [number, number][] = [];
         listaTrabajosParaDashboard.forEach((t: any) => {
           if (t.lat && t.lng) {
+            puntosBuscados.push([Number(t.lat), Number(t.lng)]);
             const colorPin = obtenerColorPin(t.tipo);
             const markerIcon = L.divIcon({
               className: 'custom-pin',
@@ -970,6 +980,12 @@ export default function DashboardAgrimensura() {
             mapMarkersMapRef.current.set(t.id, marker);
           }
         });
+        if (buscandoDashboard && puntosBuscados.length > 0) {
+          mapInstanceRef.current.fitBounds(puntosBuscados, { maxZoom: 16, padding: [40, 40] });
+        } else if (!buscandoDashboard && estabaBuscandoRef.current) {
+          mapInstanceRef.current.setView([-31.6333, -60.7000], 12);
+        }
+        estabaBuscandoRef.current = buscandoDashboard;
       }
     };
 
@@ -1073,6 +1089,18 @@ export default function DashboardAgrimensura() {
             <h2 className="text-lg md:text-xl font-black tracking-widest text-white uppercase">Panel de Estadísticas y Rendimiento</h2>
             
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="flex flex-col w-full sm:w-56">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Buscar propietario</label>
+                <div className="relative">
+                  <input type="text" placeholder="Ej: Perez" value={busquedaDashboard} onChange={e => setBusquedaDashboard(e.target.value)}
+                    className="w-full bg-[#222] border border-zinc-700 text-white p-2 pr-8 rounded text-xs font-bold tracking-wider focus:outline-none focus:border-[#727A4E]" />
+                  {buscandoDashboard && (
+                    <button type="button" onClick={() => setBusquedaDashboard("")} title="Borrar búsqueda"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 text-zinc-400 hover:text-white text-sm">✕</button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col">
                 <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Año</label>
                 <select value={filtroAnioDashboard} onChange={e => setFiltroAnioDashboard(e.target.value)}
@@ -1153,36 +1181,38 @@ export default function DashboardAgrimensura() {
                 {aniosDashOrdenados.map(anio => {
                   const mesesDelAnio = Object.keys(trabajosDashPorAnioYMes[anio]).sort((a, b) => b.localeCompare(a));
                   const totalAnio = Object.values(trabajosDashPorAnioYMes[anio]).flat().length;
+                  const anioAbierto = buscandoDashboard || aniosDashAbiertos[anio];
 
                   return (
                     <div key={anio} className="bg-[#111111] rounded-lg overflow-hidden border border-zinc-800">
                       <div onClick={() => toggleAnioDash(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
                         <h4 className="font-bold text-white uppercase tracking-widest text-sm flex items-center gap-2">
-                          <span className="text-[#727A4E] text-xs">{aniosDashAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                          <span className="text-[#727A4E] text-xs">{anioAbierto ? '▼' : '▶'}</span> AÑO {anio}
                         </h4>
                         <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
                           {totalAnio} Exp.
                         </span>
                       </div>
                       
-                      {aniosDashAbiertos[anio] && (
+                      {anioAbierto && (
                         <div className="p-3 space-y-3">
                           {mesesDelAnio.map(mesNum => {
                             const keyMesDash = `${anio}-${mesNum}`;
                             const listaMes = trabajosDashPorAnioYMes[anio][mesNum];
                             const nombreMes = nombresMeses[mesNum] || mesNum;
                             const totalMes = listaMes.length;
+                            const mesAbierto = buscandoDashboard || mesesDashAbiertos[keyMesDash];
 
                             return (
                               <div key={keyMesDash} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
                                 <div onClick={() => toggleMesDash(keyMesDash)} className="p-3 bg-[#1D1D1D] flex justify-between items-center cursor-pointer hover:bg-[#252525] select-none">
                                   <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
-                                    <span className="text-[#727A4E] text-[10px]">{mesesDashAbiertos[keyMesDash] ? '▼' : '▶'}</span> {nombreMes}
+                                    <span className="text-[#727A4E] text-[10px]">{mesAbierto ? '▼' : '▶'}</span> {nombreMes}
                                   </span>
                                   <span className="text-xs text-zinc-400 font-bold">{totalMes} Exp.</span>
                                 </div>
 
-                                {mesesDashAbiertos[keyMesDash] && (
+                                {mesAbierto && (
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-left whitespace-nowrap min-w-[650px]">
                                       <thead>
