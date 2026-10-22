@@ -72,6 +72,8 @@ const ordenarTrabajosPorPrioridad = (lista: any[]) => {
 
 const normalizarTexto = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+const aNumeroONull = (v: any) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
+
 // El orden se calcula al cargar los datos y no se recalcula al tocar una etapa,
 // para que la tarjeta no se mueva de lugar mientras se la está marcando.
 const ordenarSegunIds = (lista: any[], ids: string[]) => {
@@ -156,6 +158,9 @@ export default function DashboardAgrimensura() {
 
   const [editandoTrabajoId, setEditandoTrabajoId] = useState<string | null>(null);
   const [trabajoEditandoDash, setTrabajoEditandoDash] = useState<any | null>(null);
+  const [sugerenciasModal, setSugerenciasModal] = useState<any[]>([]);
+  const [buscandoModal, setBuscandoModal] = useState(false);
+  const [mensajeUbicacionModal, setMensajeUbicacionModal] = useState("");
   const [trabajoResaltadoId, setTrabajoResaltadoId] = useState<string | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
@@ -176,6 +181,7 @@ export default function DashboardAgrimensura() {
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapMarkersMapRef = useRef<Map<string, any>>(new Map());
+  const moverPinRef = useRef<(t: any, lat: number, lng: number, revertir: () => void) => void>(() => {});
 
   // Manejo de Sesión de Supabase (Persistencia automática en localStorage)
   useEffect(() => {
@@ -559,16 +565,73 @@ export default function DashboardAgrimensura() {
       propietario: trabajoEditandoDash.propietario,
       nombre_expediente: `${trabajoEditandoDash.tipo} - ${trabajoEditandoDash.propietario}`,
       encargado: trabajoEditandoDash.encargado,
-      fecha_finalizacion: trabajoEditandoDash.fecha_finalizacion
+      fecha_finalizacion: trabajoEditandoDash.fecha_finalizacion,
+      ubicacion: (trabajoEditandoDash.ubicacion || "").trim() || null,
+      lat: aNumeroONull(trabajoEditandoDash.lat),
+      lng: aNumeroONull(trabajoEditandoDash.lng)
     }).eq("id", trabajoEditandoDash.id);
 
     if (error) {
       alert(`Error al actualizar: ${error.message}`);
     } else {
-      setTrabajoEditandoDash(null);
+      cerrarModalEdicionDash();
       cargarDatos();
     }
   };
+
+  const cerrarModalEdicionDash = () => {
+    setTrabajoEditandoDash(null);
+    setSugerenciasModal([]);
+    setMensajeUbicacionModal("");
+  };
+
+  // Ubicación en el formulario de edición: acepta coordenadas pegadas o una dirección.
+  const buscarUbicacionModal = async () => {
+    const texto = (trabajoEditandoDash?.ubicacion || "").trim();
+    if (!texto) return;
+    setMensajeUbicacionModal("");
+    const coords = parsearCoordenadasPegadas(texto);
+    if (coords) {
+      setTrabajoEditandoDash((prev: any) => ({ ...prev, lat: coords.lat, lng: coords.lng }));
+      setSugerenciasModal([]);
+      setMensajeUbicacionModal("Coordenadas aplicadas.");
+      return;
+    }
+    setBuscandoModal(true);
+    try {
+      const buscarCon = (bounded: boolean) =>
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(texto)}&countrycodes=ar&viewbox=${VIEWBOX_SANTA_FE_SANTO_TOME}${bounded ? "&bounded=1" : ""}&limit=6`)
+          .then(res => res.json());
+      let data = await buscarCon(true);
+      if (!data || data.length === 0) data = await buscarCon(false);
+      setSugerenciasModal(data || []);
+      if (!data || data.length === 0) setMensajeUbicacionModal("No se encontró esa dirección.");
+    } catch {
+      setMensajeUbicacionModal("No se pudo buscar. Probá de nuevo.");
+    } finally {
+      setBuscandoModal(false);
+    }
+  };
+
+  const elegirSugerenciaModal = (item: any) => {
+    setTrabajoEditandoDash((prev: any) => ({ ...prev, ubicacion: item.display_name, lat: item.lat, lng: item.lon }));
+    setSugerenciasModal([]);
+  };
+
+  // Al arrastrar un pin en el mapa: se pide confirmación y se guarda la nueva posición.
+  const moverPinTrabajo = async (t: any, lat: number, lng: number, revertir: () => void) => {
+    const nombre = t.propietario || t.nombre_expediente;
+    const coordsTexto = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    if (!confirm(`¿Mover el pin de ${nombre} a esta nueva ubicación?\n\n${coordsTexto}`)) { revertir(); return; }
+    const textoActual = (t.ubicacion || "").trim();
+    const textoEsCoordenadas = /^-?\d+\.\d+\s*,\s*-?\d+\.\d+$/.test(textoActual);
+    const cambios = { lat, lng, ubicacion: !textoActual || textoEsCoordenadas ? coordsTexto : t.ubicacion };
+    const { error } = await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
+    if (error) { revertir(); alert(`No se pudo mover el pin: ${error.message}`); return; }
+    setTrabajosFinalizados(prev => prev.map(x => x.id === t.id ? { ...x, ...cambios } : x));
+  };
+
+  useEffect(() => { moverPinRef.current = moverPinTrabajo; });
 
   const finalizarTrabajo = async (t: any) => {
     const nombreMostrar = t.tipo ? `${t.tipo} de ${t.propietario}` : t.nombre_expediente;
@@ -974,7 +1037,11 @@ export default function DashboardAgrimensura() {
               iconAnchor: [7, 7]
             });
 
-            const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon });
+            const marker = L.marker([Number(t.lat), Number(t.lng)], { icon: markerIcon, draggable: true });
+            marker.on('dragend', () => {
+              const p = marker.getLatLng();
+              moverPinRef.current(t, p.lat, p.lng, () => marker.setLatLng([Number(t.lat), Number(t.lng)]));
+            });
             marker.bindPopup(`<b>[${t.tipo || 'TRABAJO'}]</b> ${t.propietario || t.nombre_expediente}<br><small>Socio: ${t.encargado} | Año: ${t.fecha_finalizacion ? t.fecha_finalizacion.substring(0,4) : 'S/F'}</small><br><a href="${urlGoogleMaps(t.lat, t.lng)}" target="_blank" rel="noreferrer" style="color:#3b82f6;font-weight:bold;text-decoration:none">📍 Abrir en Google Maps</a>`);
             markersLayerRef.current.addLayer(marker);
             mapMarkersMapRef.current.set(t.id, marker);
@@ -1158,7 +1225,7 @@ export default function DashboardAgrimensura() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
               <div>
                 <h3 className="font-bold text-white tracking-widest uppercase text-sm">🗺️ Mapa de Trabajos Realizados</h3>
-                <p className="text-xs text-zinc-400">Pines diferenciados por color. Podés alternar entre Calles y Satélite arriba a la derecha.</p>
+                <p className="text-xs text-zinc-400">Pines diferenciados por color. Podés alternar entre Calles y Satélite arriba a la derecha. Arrastrá un pin para corregir su ubicación.</p>
               </div>
               <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase">
                 <span className="flex items-center gap-1 bg-[#222] px-2 py-1 rounded"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> VEP</span>
@@ -1248,7 +1315,7 @@ export default function DashboardAgrimensura() {
                                                     </a>
                                                   </div>
                                                 ) : (
-                                                  <span className="text-zinc-600 text-[10px]">Sin GPS</span>
+                                                  <button onClick={() => setTrabajoEditandoDash({ ...t })} className="text-zinc-500 hover:text-white text-[10px] underline" title="Agregar ubicación">Sin GPS · ubicar</button>
                                                 )}
                                               </td>
                                               <td className="p-3 text-center">
@@ -1304,8 +1371,35 @@ export default function DashboardAgrimensura() {
               <input type="date" className="w-full bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs cursor-pointer" value={trabajoEditandoDash.fecha_finalizacion ? trabajoEditandoDash.fecha_finalizacion.substring(0,10) : ""} onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, fecha_finalizacion: e.target.value})} required />
             </div>
 
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#727A4E] block mb-1">Ubicación (dirección o coordenadas)</label>
+              <div className="flex gap-2">
+                <input type="text" className="flex-1 bg-[#222] border border-zinc-700 text-white p-2 rounded text-xs" placeholder="Ej: J. P. López 850, o -31.63, -60.70"
+                  value={trabajoEditandoDash.ubicacion || ""}
+                  onChange={e => setTrabajoEditandoDash({...trabajoEditandoDash, ubicacion: e.target.value})}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscarUbicacionModal(); } }} />
+                <button type="button" onClick={buscarUbicacionModal} disabled={buscandoModal}
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-white text-xs font-bold rounded uppercase">{buscandoModal ? "..." : "Buscar"}</button>
+              </div>
+              {sugerenciasModal.length > 0 && (
+                <div className="mt-1 border border-zinc-700 rounded divide-y divide-zinc-800 bg-[#1D1D1D] max-h-40 overflow-y-auto">
+                  {sugerenciasModal.map((item: any, idx: number) => (
+                    <button key={idx} type="button" onClick={() => elegirSugerenciaModal(item)}
+                      className="block w-full text-left p-2 text-[11px] text-zinc-300 hover:bg-[#2A2A2A]">📍 {item.display_name}</button>
+                  ))}
+                </div>
+              )}
+              {mensajeUbicacionModal && <p className="text-[10px] text-zinc-400 mt-1">{mensajeUbicacionModal}</p>}
+              <p className="text-[10px] text-zinc-500 mt-1">
+                {aNumeroONull(trabajoEditandoDash.lat) !== null && aNumeroONull(trabajoEditandoDash.lng) !== null ? (
+                  <>📍 Pin en {Number(trabajoEditandoDash.lat).toFixed(5)}, {Number(trabajoEditandoDash.lng).toFixed(5)}
+                    <button type="button" onClick={() => setTrabajoEditandoDash({...trabajoEditandoDash, lat: null, lng: null})} className="ml-2 underline hover:text-white">Quitar pin</button></>
+                ) : "Sin pin en el mapa"}
+              </p>
+            </div>
+
             <div className="flex justify-end gap-2 pt-4 border-t border-zinc-800">
-              <button type="button" onClick={() => setTrabajoEditandoDash(null)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded uppercase">Cancelar</button>
+              <button type="button" onClick={cerrarModalEdicionDash} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded uppercase">Cancelar</button>
               <button type="submit" className="px-4 py-2 bg-[#727A4E] hover:bg-[#8B9461] text-white text-xs font-bold rounded uppercase">Guardar Cambios</button>
             </div>
           </form>
