@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
 const ETAPAS_BASE = [
-  { id: 'e_medido', label: 'Medido' }, { id: 'e_aportes_pagados', label: 'Aportes Pagados' }, { id: 'e_definido', label: 'Definido' },
+  { id: 'e_medido', label: 'Medido' }, { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definido' },
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' },
   { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
   { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
@@ -43,13 +43,17 @@ const obtenerEtapasParaTrabajo = (t: any) => {
   return etapas;
 };
 
-// FAC y Visado tienen 3 fases: 0 sin tocar, 1 iniciado (la columna de la etapa),
-// 2 aprobado (la columna de la etapa + su columna de aprobado).
-const COLUMNA_APROBADO: Record<string, string> = { e_fac: 'e_fac_aprobado', e_visado: 'e_visado_aprobado' };
+// FAC, Visado y Aportes tienen 3 fases: 0 sin tocar, 1 la columna de la etapa,
+// 2 la columna de la etapa + su columna final. Cada una con sus nombres de fase.
+const ETAPAS_TRES_FASES: Record<string, { final: string; fases: [string, string, string] }> = {
+  e_fac: { final: 'e_fac_aprobado', fases: ['sin iniciar', 'iniciado', 'aprobado'] },
+  e_visado: { final: 'e_visado_aprobado', fases: ['sin iniciar', 'iniciado', 'aprobado'] },
+  e_aportes_generados: { final: 'e_aportes_pagados', fases: ['sin generar', 'generados', 'pagados'] },
+};
 const faseEtapa = (t: any, id: string) => {
-  const aprobado = COLUMNA_APROBADO[id];
-  if (!aprobado) return t[id] ? 2 : 0;
-  return !t[id] ? 0 : t[aprobado] ? 2 : 1;
+  const config = ETAPAS_TRES_FASES[id];
+  if (!config) return t[id] ? 2 : 0;
+  return !t[id] ? 0 : t[config.final] ? 2 : 1;
 };
 const etapaCompleta = (t: any, id: string) => faseEtapa(t, id) === 2;
 
@@ -537,7 +541,7 @@ export default function DashboardAgrimensura() {
 
   const ciclarEtapaTresFases = async (t: any, id: string) => {
     const fase = (faseEtapa(t, id) + 1) % 3;
-    const cambios = { [id]: fase > 0, [COLUMNA_APROBADO[id]]: fase === 2 };
+    const cambios = { [id]: fase > 0, [ETAPAS_TRES_FASES[id].final]: fase === 2 };
     setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, ...cambios } : x));
     await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
   };
@@ -744,7 +748,7 @@ export default function DashboardAgrimensura() {
     return (
       <div className="flex gap-1 flex-wrap items-center py-1">
         {etapas.map((e: any) => {
-          const tresFases = e.id in COLUMNA_APROBADO;
+          const tresFases = e.id in ETAPAS_TRES_FASES;
           const fase = faseEtapa(t, e.id);
           const colores = fase === 2
             ? 'bg-[#727A4E] text-white border-[#727A4E]'
@@ -753,7 +757,7 @@ export default function DashboardAgrimensura() {
               : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500';
           return (
             <button key={e.id} onClick={() => tresFases ? ciclarEtapaTresFases(t, e.id) : toggleEtapa(t.id, e.id, t[e.id])}
-              title={tresFases ? `${e.label}: ${['sin iniciar', 'iniciado', 'aprobado'][fase]}` : e.label}
+              title={tresFases ? `${e.label}: ${ETAPAS_TRES_FASES[e.id].fases[fase]}` : e.label}
               className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${colores}`}>
               {e.label}
             </button>
