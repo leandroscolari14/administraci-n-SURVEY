@@ -8,6 +8,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
+// Gasto fijo que se suma en los trámites REP (incluye el costo de la escritura).
+const GASTO_EXTRA_REP = 12700;
+
 const ETAPAS_BASE = [
   { id: 'e_medido', label: 'Medido' }, { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definido' },
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' },
@@ -312,7 +315,7 @@ export default function DashboardAgrimensura() {
     let nuevoEncargado = campo === 'encargado' ? valor : nuevaFinanza.encargado;
     let eLeo = 0, eBruno = 0;
     const esREP = nuevoTramite.toUpperCase().includes("REP");
-    if (nuevoEncargado === "Leo") { eLeo = 20800; eBruno = esREP ? 11700 : 0; } else { eLeo = 0; eBruno = esREP ? (20800 + 11700) : 20800; }
+    if (nuevoEncargado === "Leo") { eLeo = 20800; eBruno = esREP ? GASTO_EXTRA_REP : 0; } else { eLeo = 0; eBruno = esREP ? (20800 + GASTO_EXTRA_REP) : 20800; }
     setNuevaFinanza({ ...nuevaFinanza, [campo]: valor, extraLeo: eLeo, extraBruno: eBruno });
   };
 
