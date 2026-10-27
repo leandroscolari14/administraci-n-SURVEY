@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { causaDelError, fetchSF } from '../_lib/sf';
 
 /**
  * Integración con el SCIT de Santa Fe (consulta de partida inmobiliaria).
@@ -57,13 +58,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const pagina = await fetch(SCIT_URL, { headers: HEADERS_BASE });
+    const pagina = await fetchSF(SCIT_URL, { headers: HEADERS_BASE });
     const cookieHeader = extraerCookies(pagina);
     const html = await pagina.text();
     const token = extraerToken(html);
 
     if (!token) {
-      return NextResponse.json({ error: 'no se pudo obtener el token del formulario (form_consulta[_token])' }, { status: 502 });
+      return NextResponse.json({
+        error: 'no se pudo obtener el token del formulario (form_consulta[_token])',
+        estado: pagina.status,
+        tipo: pagina.headers.get('content-type'),
+        inicio: html.replace(/\s+/g, ' ').slice(0, 300),
+      }, { status: 502 });
     }
 
     const partida = normalizarPartida(partidaInput);
@@ -73,7 +79,7 @@ export async function GET(req: NextRequest) {
       'form_consulta[_token]': token,
     });
 
-    const respuesta = await fetch(SCIT_URL, {
+    const respuesta = await fetchSF(SCIT_URL, {
       method: 'POST',
       headers: {
         ...HEADERS_BASE,
@@ -90,6 +96,6 @@ export async function GET(req: NextRequest) {
     const htmlResultado = await respuesta.text();
     return NextResponse.json({ html: htmlResultado });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: String(err), causa: causaDelError(err) }, { status: 500 });
   }
 }

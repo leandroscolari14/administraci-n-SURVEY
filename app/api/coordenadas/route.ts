@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { causaDelError, fetchSF } from '../_lib/sf';
 
 /**
  * Consulta el "Buscador de Parcelas Catastrales" de la IDESF para obtener
@@ -35,7 +36,7 @@ function extraerCookies(resp: Response) {
 }
 
 async function pedirExtentOCentro(modo: string, idParcela: string, cookieHeader: string) {
-  const resp = await fetch(`${PROXY_URL}?request=${modo}`, {
+  const resp = await fetchSF(`${PROXY_URL}?request=${modo}`, {
     method: 'POST',
     headers: {
       ...HEADERS_BASE,
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const pagina = await fetch(PAGINA_URL, { headers: HEADERS_BASE });
+    const pagina = await fetchSF(PAGINA_URL, { headers: HEADERS_BASE });
     const cookieHeader = extraerCookies(pagina);
 
     const [extent, centro] = await Promise.all([
@@ -74,6 +75,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ extent, centro });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: String(err), causa: causaDelError(err) }, { status: 500 });
   }
 }
