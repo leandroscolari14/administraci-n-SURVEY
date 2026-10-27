@@ -178,6 +178,7 @@ export default function DashboardAgrimensura() {
   const [filtroTipoDashboard, setFiltroTipoDashboard] = useState("Todos");
   const [busquedaDashboard, setBusquedaDashboard] = useState("");
   const estabaBuscandoRef = useRef(false);
+  const [busquedaHistorial, setBusquedaHistorial] = useState("");
 
   // Referencias para Leaflet (Mapa persistente)
   const mapInstanceRef = useRef<any>(null);
@@ -775,33 +776,56 @@ export default function DashboardAgrimensura() {
     "07": "Julio", "08": "Agosto", "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre", "00": "Sin Fecha"
   };
 
-  const historialAgrupado = historial.reduce((acc: any, item: any) => {
-    const fechaLiq = item.fecha_liquidacion;
-    const anio = fechaLiq ? fechaLiq.substring(0, 4) : "Sin Fecha";
-    const mesNum = fechaLiq ? fechaLiq.substring(5, 7) : "00";
-    
-    if (!acc[anio]) acc[anio] = {};
-    if (!acc[anio][mesNum]) acc[anio][mesNum] = {};
-    
-    const semanaKey = fechaLiq || "anterior";
-    if (!acc[anio][mesNum][semanaKey]) acc[anio][mesNum][semanaKey] = [];
-    acc[anio][mesNum][semanaKey].push(item);
-    return acc;
-  }, {});
+  const agruparHistorial = (lista: any[]) => {
+    const agrupado = lista.reduce((acc: any, item: any) => {
+      const fechaLiq = item.fecha_liquidacion;
+      const anio = fechaLiq ? fechaLiq.substring(0, 4) : "Sin Fecha";
+      const mesNum = fechaLiq ? fechaLiq.substring(5, 7) : "00";
 
-  Object.keys(historialAgrupado).forEach(anio => {
-    Object.keys(historialAgrupado[anio]).forEach(mesNum => {
-      Object.keys(historialAgrupado[anio][mesNum]).forEach(semanaKey => {
-        historialAgrupado[anio][mesNum][semanaKey].sort((a: any, b: any) => {
-          const propA = (a.propietario || a.tipo_tramite || "").toLowerCase();
-          const propB = (b.propietario || b.tipo_tramite || "").toLowerCase();
-          return propA.localeCompare(propB);
+      if (!acc[anio]) acc[anio] = {};
+      if (!acc[anio][mesNum]) acc[anio][mesNum] = {};
+
+      const semanaKey = fechaLiq || "anterior";
+      if (!acc[anio][mesNum][semanaKey]) acc[anio][mesNum][semanaKey] = [];
+      acc[anio][mesNum][semanaKey].push(item);
+      return acc;
+    }, {});
+
+    Object.keys(agrupado).forEach(anio => {
+      Object.keys(agrupado[anio]).forEach(mesNum => {
+        Object.keys(agrupado[anio][mesNum]).forEach(semanaKey => {
+          agrupado[anio][mesNum][semanaKey].sort((a: any, b: any) => {
+            const propA = (a.propietario || a.tipo_tramite || "").toLowerCase();
+            const propB = (b.propietario || b.tipo_tramite || "").toLowerCase();
+            return propA.localeCompare(propB);
+          });
         });
       });
     });
-  });
+    return agrupado;
+  };
 
-  const aniosFinanzasOrdenados = Object.keys(historialAgrupado).sort((a, b) => {
+  const historialAgrupado = agruparHistorial(historial);
+
+  const buscandoHistorial = busquedaHistorial.trim() !== "";
+  const palabrasHistorial = normalizarTexto(busquedaHistorial).split(/\s+/).filter(Boolean);
+  const coincideHistorial = (h: any) => {
+    const propietario = normalizarTexto(h.propietario || "");
+    return palabrasHistorial.every(p => propietario.includes(p));
+  };
+  const historialCoincidencias = buscandoHistorial ? historial.filter(coincideHistorial) : historial;
+  const historialVisible = buscandoHistorial ? agruparHistorial(historialCoincidencias) : historialAgrupado;
+  const ingresosCoincidencias = historialCoincidencias.filter((h: any) => !h.es_gasto_5050);
+  const entregadoBusqueda = ingresosCoincidencias.reduce((suma: number, h: any) => suma + Number(h.ingreso_total || 0), 0);
+  const entregadoPorPropietario = Object.values(ingresosCoincidencias.reduce((acc: Record<string, { nombre: string; total: number }>, h: any) => {
+    const clave = normalizarTexto(h.propietario || "").trim();
+    acc[clave] = { nombre: acc[clave]?.nombre || h.propietario, total: (acc[clave]?.total || 0) + Number(h.ingreso_total || 0) };
+    return acc;
+  }, {})).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const semanaActualCoincidencias = buscandoHistorial ? finanzas.filter((f: any) => !f.es_gasto_5050 && coincideHistorial(f)) : [];
+  const entregadoSemanaActual = semanaActualCoincidencias.reduce((suma: number, f: any) => suma + Number(f.ingreso_total || 0), 0);
+
+  const aniosFinanzasOrdenados = Object.keys(historialVisible).sort((a, b) => {
     if (a === "Sin Fecha") return 1;
     if (b === "Sin Fecha") return -1;
     return b.localeCompare(a);
@@ -1783,29 +1807,68 @@ export default function DashboardAgrimensura() {
           {subTabFinanzas === "historial" && (
             <div className="space-y-4">
               <h3 className="text-lg font-black tracking-widest text-white mb-4 uppercase">Historial de Finanzas Liquidadas</h3>
+
+              <div className="bg-[#1A1A1A] rounded-xl border border-zinc-800 p-4 space-y-3">
+                <div className="flex flex-col w-full sm:w-72">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-1">Buscar propietario</label>
+                  <div className="relative">
+                    <input type="text" placeholder="Ej: Perez" value={busquedaHistorial} onChange={e => setBusquedaHistorial(e.target.value)}
+                      className="w-full bg-[#222] border border-zinc-700 text-white p-2 pr-8 rounded text-xs font-bold tracking-wider focus:outline-none focus:border-[#727A4E]" />
+                    {buscandoHistorial && (
+                      <button type="button" onClick={() => setBusquedaHistorial("")} title="Borrar búsqueda"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 text-zinc-400 hover:text-white text-sm">✕</button>
+                    )}
+                  </div>
+                </div>
+
+                {buscandoHistorial && (
+                  <div className="space-y-2 text-xs text-zinc-400">
+                    <p>
+                      {ingresosCoincidencias.length} {ingresosCoincidencias.length === 1 ? "registro liquidado" : "registros liquidados"} · Total ingresado:{" "}
+                      <span className="text-[#A4B070] font-black text-sm">${formatearPlata(entregadoBusqueda)}</span>
+                    </p>
+                    {entregadoPorPropietario.length > 1 && (
+                      <div className="flex flex-wrap gap-2">
+                        {entregadoPorPropietario.map(({ nombre, total }) => (
+                          <span key={nombre} className="bg-[#222] border border-zinc-700 rounded px-2 py-1 text-[11px]">
+                            <span className="text-zinc-300 font-bold">{nombre}</span> ${formatearPlata(total)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {semanaActualCoincidencias.length > 0 && (
+                      <p className="text-yellow-400/90">
+                        Además, en la semana actual (sin liquidar): {semanaActualCoincidencias.length} {semanaActualCoincidencias.length === 1 ? "registro" : "registros"} por ${formatearPlata(entregadoSemanaActual)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {aniosFinanzasOrdenados.length === 0 ? (
-                <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#1A1A1A] rounded-xl border border-zinc-800">No hay historial de finanzas</p>
+                <p className="p-8 text-center text-zinc-500 font-bold tracking-widest uppercase bg-[#1A1A1A] rounded-xl border border-zinc-800">{buscandoHistorial ? "No se encontraron registros liquidados de ese propietario" : "No hay historial de finanzas"}</p>
               ) : (
                 <div className="space-y-4">
                   {aniosFinanzasOrdenados.map(anio => {
-                    const mesesDelAnio = Object.keys(historialAgrupado[anio]).sort((a, b) => b.localeCompare(a));
+                    const mesesDelAnio = Object.keys(historialVisible[anio]).sort((a, b) => b.localeCompare(a));
+                    const anioFinAbierto = buscandoHistorial || aniosFinanzasAbiertos[anio];
                     return (
                       <div key={anio} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
                         <div onClick={() => toggleAnioFinanzas(anio)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
                           <h4 className="font-bold text-white uppercase tracking-widest text-sm md:text-base flex items-center gap-2">
-                            <span className="text-[#727A4E] text-xs">{aniosFinanzasAbiertos[anio] ? '▼' : '▶'}</span> AÑO {anio}
+                            <span className="text-[#727A4E] text-xs">{anioFinAbierto ? '▼' : '▶'}</span> AÑO {anio}
                           </h4>
                           <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">
-                            {Object.values(historialAgrupado[anio]).map((m: any) => Object.values(m).flat()).flat().length} Registros
+                            {Object.values(historialVisible[anio]).map((m: any) => Object.values(m).flat()).flat().length} Registros
                           </span>
                         </div>
 
-                        {aniosFinanzasAbiertos[anio] && (
+                        {anioFinAbierto && (
                           <div className="p-3 space-y-3">
                             {mesesDelAnio.map(mesNum => {
                               const keyMesFinanza = `${anio}-${mesNum}`;
-                              const semanasDelMes = historialAgrupado[anio][mesNum];
+                              const semanasDelMes = historialVisible[anio][mesNum];
+                              const mesFinAbierto = buscandoHistorial || mesesFinanzasAbiertos[keyMesFinanza];
                               const nombresSemanas = Object.keys(semanasDelMes).sort((a, b) => {
                                 if (a === "anterior") return 1;
                                 if (b === "anterior") return -1;
@@ -1817,19 +1880,20 @@ export default function DashboardAgrimensura() {
                                 <div key={keyMesFinanza} className="bg-[#161616] rounded-lg overflow-hidden border border-zinc-800 ml-2 md:ml-4">
                                   <div onClick={() => toggleMesFinanzas(keyMesFinanza)} className="p-3 bg-[#1D1D1D] flex justify-between cursor-pointer hover:bg-[#252525] select-none">
                                     <span className="font-bold text-zinc-300 uppercase tracking-wider text-xs flex items-center gap-2">
-                                      <span className="text-[#727A4E] text-[10px]">{mesesFinanzasAbiertos[keyMesFinanza] ? '▼' : '▶'}</span> {nombreMes}
+                                      <span className="text-[#727A4E] text-[10px]">{mesFinAbierto ? '▼' : '▶'}</span> {nombreMes}
                                     </span>
                                     <span className="text-xs text-zinc-500 font-bold">{nombresSemanas.length} Semanas</span>
                                   </div>
 
-                                  {mesesFinanzasAbiertos[keyMesFinanza] && (
+                                  {mesFinAbierto && (
                                     <div className="p-3 space-y-3">
                                       {nombresSemanas.map(fechaKey => {
                                         const trabajosDelBloque = semanasDelMes[fechaKey];
                                         const tituloBloque = fechaKey === "anterior" ? "Liquidaciones Anteriores (Sin fecha)" : `Liq. ${new Date(fechaKey).toLocaleDateString("es-AR")}`;
-                                        const estaAbierto = semanasAbiertas[fechaKey] || false;
-                                        const resumenBloque = generarResumen(trabajosDelBloque);
-                                        const comprobanteUrl = trabajosDelBloque.find((item: any) => item.comprobante_url)?.comprobante_url;
+                                        const estaAbierto = buscandoHistorial || semanasAbiertas[fechaKey] || false;
+                                        const bloqueCompleto = historialAgrupado[anio][mesNum][fechaKey];
+                                        const resumenBloque = generarResumen(bloqueCompleto);
+                                        const comprobanteUrl = bloqueCompleto.find((item: any) => item.comprobante_url)?.comprobante_url;
 
                                         return (
                                           <div key={fechaKey} className="bg-[#111111] rounded-xl shadow-md overflow-hidden border border-zinc-800 ml-2 md:ml-4">
@@ -1839,10 +1903,12 @@ export default function DashboardAgrimensura() {
                                                 {comprobanteUrl && <span className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[9px] px-2 py-0.5 rounded font-bold">📎 Con Comprobante</span>}
                                                 <span className="text-zinc-400 text-[10px] font-bold px-2 py-0.5 bg-[#111] rounded border border-zinc-700 ml-auto md:ml-0">({trabajosDelBloque.length}) {estaAbierto ? '▼' : '▶'}</span>
                                               </h5>
-                                              <div className="flex gap-2 w-full md:w-auto justify-end">
-                                                <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
-                                                <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
-                                              </div>
+                                              {!buscandoHistorial && (
+                                                <div className="flex gap-2 w-full md:w-auto justify-end">
+                                                  <button onClick={() => reabrirSemana(fechaKey)} className="bg-transparent border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Reabrir</button>
+                                                  <button onClick={() => eliminarSemana(fechaKey)} className="bg-red-900/25 hover:bg-red-900/60 border border-red-900/50 text-red-400 px-3 py-1 text-[10px] tracking-wider font-bold rounded uppercase">Borrar</button>
+                                                </div>
+                                              )}
                                             </div>
                                             
                                             {estaAbierto && (
