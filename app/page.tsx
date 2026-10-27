@@ -466,13 +466,9 @@ export default function DashboardAgrimensura() {
 
       if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) throw new Error("IDESF no devolvió coordenadas válidas.");
 
-      // La dirección de catastro solo sirve en zona urbana y con número; en suburbanas/rurales
-      // suele venir "S/N" o vacía, así que se usan las coordenadas del centro de la parcela.
-      const zona = (data.generales["Zona"] || "").toUpperCase();
-      const esUrbana = zona.includes("URBAN") && !zona.includes("SUBURBAN");
-      const direccionCatastro = (data.generales["Ubicación"] || "").trim();
-      const direccionSirve = esUrbana && direccionCatastro !== "" && !/S\s*\/\s*N\s*$/i.test(direccionCatastro);
-      const ubicacionTexto = direccionSirve ? direccionCatastro : `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      // Siempre se carga el centro de la parcela como coordenadas: es lo más exacto
+      // y es lo que recibe Google Calendar como lugar de la medición.
+      const ubicacionTexto = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       setNuevoTrabajo((prev) => ({ ...prev, ubicacion: ubicacionTexto, lat: String(lat), lng: String(lng) }));
       setSugerenciasDireccion([]);
     } catch (err: any) {
