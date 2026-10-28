@@ -12,8 +12,8 @@ const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/searc
 const GASTO_EXTRA_REP = 12700;
 
 const ETAPAS_BASE = [
-  { id: 'e_medido', label: 'Medido' }, { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definido' },
-  { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_fac', label: 'FAC' },
+  { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_medido', label: 'Medido' },
+  { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definido' }, { id: 'e_fac', label: 'FAC' },
   { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
   { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
 ];
