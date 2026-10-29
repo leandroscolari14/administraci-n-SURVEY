@@ -556,6 +556,13 @@ export default function DashboardAgrimensura() {
     await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
   };
 
+  const toggleEstadoIngresado = async (t: any) => {
+    const nuevoColor = t.color_alerta === 'amarillo' ? 'verde' : 'amarillo';
+    setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, color_alerta: nuevoColor } : x));
+    const { error } = await supabase.from("trabajos_curso").update({ color_alerta: nuevoColor }).eq("id", t.id);
+    if (error) setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, color_alerta: t.color_alerta } : x));
+  };
+
   const guardarEdicionRapidaDash = async (e: any) => {
     e.preventDefault();
     if (!trabajoEditandoDash) return;
@@ -910,6 +917,11 @@ export default function DashboardAgrimensura() {
               <a href={generarLinkCalendarExpediente(t)} target="_blank" rel="noreferrer" className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-800/50 px-2 py-1.5 rounded text-[10px] tracking-wider font-bold uppercase whitespace-nowrap" title="Agendar Medición en Google Calendar">📅 Calendar</a>
             )}
             <button onClick={() => iniciarEdicionTrabajo(t)} className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded text-white" title="Editar Expediente">✏️</button>
+            <button onClick={() => toggleEstadoIngresado(t)}
+              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded border whitespace-nowrap ${esPendiente ? 'bg-yellow-900/30 hover:bg-yellow-900/60 border-yellow-700/50 text-yellow-400' : 'bg-emerald-900/30 hover:bg-emerald-900/60 border-emerald-700/50 text-emerald-400'}`}
+              title={esPendiente ? 'Pendiente: click para pasar a Ingresado' : 'Ingresado: click para pasar a Pendiente'}>
+              {esPendiente ? 'Pendiente' : 'Ingresado'}
+            </button>
             <button onClick={() => finalizarTrabajo(t)} className="text-xs bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-700/50 px-2 py-1.5 rounded text-emerald-300 font-bold" title="Finalizar">✅</button>
             <button onClick={() => eliminarTrabajo(t.id)} className="text-xs bg-red-900/30 hover:bg-red-900/60 border border-red-800/50 px-2 py-1.5 rounded text-red-400 font-bold" title="Eliminar">🗑️</button>
           </div>
