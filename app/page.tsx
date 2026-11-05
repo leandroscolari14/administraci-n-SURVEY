@@ -1038,14 +1038,14 @@ export default function DashboardAgrimensura() {
       if (!L || !mapContainerRef.current) return;
 
       if (!mapInstanceRef.current) {
-        const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap'
+        const osmLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+          maxZoom: 21,
+          attribution: 'Map data &copy; Google'
         });
 
-        const sateliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-          maxZoom: 19,
-          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        const sateliteLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+          maxZoom: 21,
+          attribution: 'Imagery &copy; Google'
         });
 
         const map = L.map(mapContainerRef.current, {
@@ -1056,8 +1056,8 @@ export default function DashboardAgrimensura() {
         mapInstanceRef.current = map;
 
         const baseMaps = {
-          "🗺️ Calles (OSM)": osmLayer,
-          "🛰️ Satélite": sateliteLayer
+          "🗺️ Calles (Google)": osmLayer,
+          "🛰️ Satélite (Google)": sateliteLayer
         };
 
         L.control.layers(baseMaps).addTo(map);
@@ -1153,10 +1153,10 @@ export default function DashboardAgrimensura() {
       if (!L || !contenedor) return;
 
       if (!mapaMedRef.current) {
-        const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; OpenStreetMap' });
-        const sateliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
+        const osmLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", { maxZoom: 21, attribution: 'Map data &copy; Google' });
+        const sateliteLayer = L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", { maxZoom: 21, attribution: 'Imagery &copy; Google' });
         const map = L.map(contenedor, { center: [-31.6333, -60.7000], zoom: 12, layers: [osmLayer] });
-        L.control.layers({ "🗺️ Calles (OSM)": osmLayer, "🛰️ Satélite": sateliteLayer }).addTo(map);
+        L.control.layers({ "🗺️ Calles (Google)": osmLayer, "🛰️ Satélite (Google)": sateliteLayer }).addTo(map);
         mapaMedRef.current = map;
         mapaMedCapaRef.current = L.layerGroup().addTo(map);
         // Las etiquetas con el nombre solo se muestran de cerca, para que no se tapen entre sí.
