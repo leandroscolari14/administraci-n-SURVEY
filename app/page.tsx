@@ -8,6 +8,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
+const escaparHTML = (s: any) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+
 // Gasto fijo que se suma en los trámites REP (incluye el costo de la escritura).
 const GASTO_EXTRA_REP = 12700;
 
@@ -179,6 +181,8 @@ export default function DashboardAgrimensura() {
   const [busquedaDashboard, setBusquedaDashboard] = useState("");
   const estabaBuscandoRef = useRef(false);
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
+  const [mapaMedicionesAbierto, setMapaMedicionesAbierto] = useState(false);
+  const [filtroSocioMediciones, setFiltroSocioMediciones] = useState("Todos");
 
   // Referencias para Leaflet (Mapa persistente)
   const mapInstanceRef = useRef<any>(null);
@@ -186,6 +190,11 @@ export default function DashboardAgrimensura() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapMarkersMapRef = useRef<Map<string, any>>(new Map());
   const moverPinRef = useRef<(t: any, lat: number, lng: number, revertir: () => void) => void>(() => {});
+  // Mapa de "Mediciones pendientes" (ventana aparte, con su propia instancia de Leaflet)
+  const mapaMedContRef = useRef<HTMLDivElement>(null);
+  const mapaMedRef = useRef<any>(null);
+  const mapaMedCapaRef = useRef<any>(null);
+  const mapaMedMarkersRef = useRef<Map<string, any>>(new Map());
 
   // Manejo de Sesión de Supabase (Persistencia automática en localStorage)
   useEffect(() => {
@@ -1104,6 +1113,104 @@ export default function DashboardAgrimensura() {
     }
   }, [activeTab, listaTrabajosParaDashboard]);
 
+  // Mediciones pendientes: trabajos en curso sin la etapa "Medido".
+  const tienePin = (t: any) => Number.isFinite(parseFloat(t.lat)) && Number.isFinite(parseFloat(t.lng));
+  const medicionesPendientes = trabajosActivos
+    .filter((t: any) => !t.e_medido)
+    .sort((a: any, b: any) => (a.propietario || a.nombre_expediente || "").localeCompare(b.propietario || b.nombre_expediente || ""));
+  const medicionesFiltradas = medicionesPendientes.filter((t: any) => filtroSocioMediciones === "Todos" || t.encargado === filtroSocioMediciones);
+  const medicionesConPin = medicionesFiltradas.filter(tienePin);
+  const medicionesSinPin = medicionesFiltradas.filter((t: any) => !tienePin(t));
+  const clavePinesMediciones = medicionesConPin.map((t: any) => `${t.id}:${t.lat}:${t.lng}`).join("|");
+
+  const centrarMedicion = (t: any) => {
+    const map = mapaMedRef.current;
+    if (!map) return;
+    map.setView([Number(t.lat), Number(t.lng)], 16, { animate: true });
+    mapaMedMarkersRef.current.get(t.id)?.openPopup();
+  };
+
+  useEffect(() => {
+    if (!mapaMedicionesAbierto) {
+      if (mapaMedRef.current) { mapaMedRef.current.remove(); mapaMedRef.current = null; mapaMedCapaRef.current = null; }
+      return;
+    }
+
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape") setMapaMedicionesAbierto(false); };
+    window.addEventListener("keydown", alTeclear);
+
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    const dibujar = () => {
+      const L = (window as any).L;
+      const contenedor = mapaMedContRef.current;
+      if (!L || !contenedor) return;
+
+      if (!mapaMedRef.current) {
+        const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; OpenStreetMap' });
+        const sateliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
+        const map = L.map(contenedor, { center: [-31.6333, -60.7000], zoom: 12, layers: [osmLayer] });
+        L.control.layers({ "🗺️ Calles (OSM)": osmLayer, "🛰️ Satélite": sateliteLayer }).addTo(map);
+        mapaMedRef.current = map;
+        mapaMedCapaRef.current = L.layerGroup().addTo(map);
+        // Las etiquetas con el nombre solo se muestran de cerca, para que no se tapen entre sí.
+        const ajustarEtiquetas = () => contenedor.classList.toggle("med-sin-etiquetas", map.getZoom() < 14);
+        map.on("zoomend", ajustarEtiquetas);
+        ajustarEtiquetas();
+      }
+
+      const map = mapaMedRef.current;
+      const capa = mapaMedCapaRef.current;
+      map.invalidateSize();
+      capa.clearLayers();
+      mapaMedMarkersRef.current.clear();
+
+      const puntos: [number, number][] = [];
+      medicionesConPin.forEach((t: any) => {
+        const lat = Number(t.lat), lng = Number(t.lng);
+        puntos.push([lat, lng]);
+        const icono = L.divIcon({
+          className: 'custom-pin',
+          html: `<div style="background-color: ${obtenerColorPin(t.tipo)}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.6);"></div>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+        const nombre = escaparHTML(t.propietario || t.nombre_expediente);
+        const marker = L.marker([lat, lng], { icon: icono });
+        marker.bindTooltip(`${escaparHTML(t.tipo)} ${nombre}`, { permanent: true, direction: "right", offset: [10, 0], className: "etiqueta-medicion" });
+        marker.bindPopup(
+          `<b>[${escaparHTML(t.tipo || 'TRABAJO')}]</b> ${nombre}<br><small>Socio: ${escaparHTML(t.encargado)}${t.estado_detalle ? ` | ${escaparHTML(t.estado_detalle)}` : ""}</small><br>` +
+          `<a href="${urlGoogleMaps(lat, lng)}" target="_blank" rel="noreferrer" style="color:#3b82f6;font-weight:bold;text-decoration:none">📍 Abrir en Google Maps</a><br>` +
+          `<a href="${generarLinkCalendarExpediente(t)}" target="_blank" rel="noreferrer" style="color:#3b82f6;font-weight:bold;text-decoration:none">📅 Agendar en Calendar</a>`
+        );
+        capa.addLayer(marker);
+        mapaMedMarkersRef.current.set(t.id, marker);
+      });
+      if (puntos.length > 0) map.fitBounds(puntos, { maxZoom: 15, padding: [40, 40] });
+    };
+
+    if ((window as any).L) {
+      dibujar();
+    } else {
+      let script = document.getElementById("leaflet-js") as HTMLScriptElement | null;
+      if (!script) {
+        script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        document.body.appendChild(script);
+      }
+      script.addEventListener("load", dibujar);
+    }
+
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [mapaMedicionesAbierto, clavePinesMediciones]);
+
   // Pantalla de carga inicial
   if (cargandoAuth) {
     return (
@@ -1441,12 +1548,65 @@ export default function DashboardAgrimensura() {
         </div>
       )}
 
+      {/* VENTANA: MEDICIONES PENDIENTES (mapa para coordinar salidas) */}
+      {mapaMedicionesAbierto && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 md:p-4">
+          <style>{`
+            .etiqueta-medicion { background: #111; color: #fff; border: 1px solid #555; font-weight: 700; font-size: 10px; padding: 1px 5px; box-shadow: none; }
+            .leaflet-tooltip-right.etiqueta-medicion::before { display: none; }
+            .med-sin-etiquetas .etiqueta-medicion { display: none; }
+          `}</style>
+          <div className="bg-[#1A1A1A] rounded-xl border border-zinc-800 w-full max-w-6xl h-[94vh] flex flex-col overflow-hidden">
+            <div className="flex flex-wrap items-center gap-3 p-3 md:p-4 border-b border-zinc-800">
+              <h3 className="text-sm md:text-lg font-black tracking-widest text-white uppercase">📍 Mediciones pendientes</h3>
+              <span className="text-xs text-zinc-400">{medicionesConPin.length} en el mapa{medicionesSinPin.length > 0 ? ` · ${medicionesSinPin.length} sin ubicación` : ""}</span>
+              <div className="flex gap-1 md:ml-auto">
+                {["Todos", "Leo", "Bruno"].map(socio => (
+                  <button key={socio} onClick={() => setFiltroSocioMediciones(socio)} className={`px-3 py-1 rounded text-[10px] md:text-xs font-bold tracking-wider uppercase transition-colors ${filtroSocioMediciones === socio ? "bg-[#727A4E] text-white" : "border border-zinc-700 text-zinc-400 hover:text-white"}`}>{socio}</button>
+                ))}
+              </div>
+              <button onClick={() => setMapaMedicionesAbierto(false)} className="text-zinc-400 hover:text-white text-xl px-2" title="Cerrar">✕</button>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+              <div className="relative flex-1 min-h-[280px]">
+                <div ref={mapaMedContRef} className="absolute inset-0" />
+              </div>
+              <div className="md:w-80 max-h-[38%] md:max-h-none overflow-y-auto border-t md:border-t-0 md:border-l border-zinc-800 p-2 space-y-1">
+                {medicionesFiltradas.length === 0 && (
+                  <p className="p-4 text-center text-xs text-zinc-500 font-bold tracking-wider uppercase">No hay mediciones pendientes</p>
+                )}
+                {medicionesConPin.map((t: any) => (
+                  <button key={t.id} onClick={() => centrarMedicion(t)} className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 transition-colors">
+                    <span className="w-3 h-3 rounded-full shrink-0 border border-white" style={{ backgroundColor: obtenerColorPin(t.tipo) }}></span>
+                    <span className="text-xs text-zinc-200 truncate"><b>[{t.tipo}]</b> {t.propietario || t.nombre_expediente}</span>
+                    <span className="ml-auto text-[10px] text-zinc-500 shrink-0">{t.encargado}</span>
+                  </button>
+                ))}
+                {medicionesSinPin.length > 0 && (
+                  <>
+                    <p className="px-2 pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-zinc-500">Sin ubicación cargada</p>
+                    {medicionesSinPin.map((t: any) => (
+                      <div key={t.id} className="flex items-center gap-2 px-2 py-1.5 opacity-60">
+                        <span className="w-3 h-3 rounded-full shrink-0 border border-zinc-600"></span>
+                        <span className="text-xs text-zinc-400 truncate"><b>[{t.tipo}]</b> {t.propietario || t.nombre_expediente}</span>
+                        <span className="ml-auto text-[10px] text-zinc-600 shrink-0">{t.encargado}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PESTAÑA: TRABAJOS EN CURSO E HISTORIAL */}
       {activeTab === "trabajos" && (
         <div className="space-y-6">
           <div className="flex flex-wrap gap-2 md:gap-4 border-b border-zinc-800 pb-4">
             <button onClick={() => setSubTabTrabajos("activos")} className={`flex-1 md:flex-none font-bold tracking-widest uppercase text-xs md:text-sm px-4 py-2 rounded transition-colors ${subTabTrabajos === "activos" ? "bg-[#727A4E] text-white" : "text-zinc-500 hover:bg-zinc-800"}`}>🟢 En Curso</button>
             <button onClick={() => setSubTabTrabajos("finalizados")} className={`flex-1 md:flex-none font-bold tracking-widest uppercase text-xs md:text-sm px-4 py-2 rounded transition-colors ${subTabTrabajos === "finalizados" ? "bg-zinc-700 text-white" : "text-zinc-500 hover:bg-zinc-800"}`}>📁 Historial de Finalizados</button>
+            <button onClick={() => setMapaMedicionesAbierto(true)} className="w-full md:w-auto md:ml-auto font-bold tracking-widest uppercase text-xs md:text-sm px-4 py-2 rounded border border-[#727A4E] text-[#A4B070] hover:bg-[#727A4E] hover:text-white transition-colors">📍 Mediciones pendientes ({medicionesPendientes.length})</button>
           </div>
 
           {subTabTrabajos === "activos" && (
