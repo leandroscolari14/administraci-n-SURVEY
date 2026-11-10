@@ -56,11 +56,11 @@ const derivarGastos = (f: any) => {
 };
 
 // Valores sugeridos al cargar: una entrega lleva aportes y gastos; un saldo va en cero.
-const valoresFinanzaPorDefecto = (tramite: string, tipoPago: string) => tipoPago === "saldo"
+const valoresFinanzaPorDefecto = (tramite: string, tipoPago: string) => tipoPago === "saldo" || tipoPago === "gastos"
   ? { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0 }
   : { caja: APORTE_CAJA, colegio: APORTE_COLEGIO, cantCert: 1, cantTitulo: tramite.toUpperCase().includes("REP") ? 1 : 0, cantSet: tramite.toUpperCase().includes("REP") ? 1 : 0, extraLeo: 0, extraBruno: 0 };
 
-const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo", cantCert: 1, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0, esGasto5050: false };
+const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo" | "gastos", cantCert: 1, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0, esGasto5050: false };
 
 const ETAPAS_BASE = [
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_medido', label: 'Medido' },
@@ -376,8 +376,9 @@ export default function DashboardAgrimensura() {
     setNuevaFinanza(siguiente);
   };
 
-  const cambiarTipoPago = (tipoPago: "entrega" | "saldo") => {
-    setNuevaFinanza({ ...nuevaFinanza, tipoPago, ...valoresFinanzaPorDefecto(nuevaFinanza.tramite, tipoPago) });
+  const cambiarTipoPago = (tipoPago: "entrega" | "saldo" | "gastos") => {
+    // Un registro de gastos no lleva ingreso: arranca todo en $0 y se completa a mano.
+    setNuevaFinanza({ ...nuevaFinanza, tipoPago, ingreso: tipoPago === "gastos" ? 0 : nuevaFinanza.ingreso, ...valoresFinanzaPorDefecto(nuevaFinanza.tramite, tipoPago) });
   };
 
   const ajustarCantidad = (campo: "cantCert" | "cantTitulo" | "cantSet", delta: number) => {
@@ -761,6 +762,10 @@ export default function DashboardAgrimensura() {
     e.preventDefault();
     const extras = calcularExtras(nuevaFinanza.encargado, nuevaFinanza.cantCert, nuevaFinanza.cantTitulo, nuevaFinanza.cantSet, nuevaFinanza.extraLeo, nuevaFinanza.extraBruno);
     const conCantidades = !nuevaFinanza.esGasto5050;
+    if (nuevaFinanza.tipoPago === "gastos" && !nuevaFinanza.esGasto5050 && nuevaFinanza.caja + nuevaFinanza.colegio + extras.extraLeo + extras.extraBruno === 0) {
+      alert("Cargá al menos un gasto (aportes, certificado, título, SET o extras).");
+      return;
+    }
     const datosGuardar = {
       tipo_tramite: nuevaFinanza.tramite, propietario: nuevaFinanza.propietario, encargado: nuevaFinanza.encargado, ingreso_total: nuevaFinanza.ingreso,
       caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extra_leo: extras.extraLeo, extra_bruno: extras.extraBruno, es_gasto_5050: nuevaFinanza.esGasto5050,
@@ -929,14 +934,14 @@ export default function DashboardAgrimensura() {
   };
   const historialCoincidencias = buscandoHistorial ? historial.filter(coincideHistorial) : historial;
   const historialVisible = buscandoHistorial ? agruparHistorial(historialCoincidencias) : historialAgrupado;
-  const ingresosCoincidencias = historialCoincidencias.filter((h: any) => !h.es_gasto_5050);
+  const ingresosCoincidencias = historialCoincidencias.filter((h: any) => !h.es_gasto_5050 && h.tipo_pago !== "gastos");
   const entregadoBusqueda = ingresosCoincidencias.reduce((suma: number, h: any) => suma + Number(h.ingreso_total || 0), 0);
   const entregadoPorPropietario = Object.values(ingresosCoincidencias.reduce((acc: Record<string, { nombre: string; total: number }>, h: any) => {
     const clave = normalizarTexto(h.propietario || "").trim();
     acc[clave] = { nombre: acc[clave]?.nombre || h.propietario, total: (acc[clave]?.total || 0) + Number(h.ingreso_total || 0) };
     return acc;
   }, {})).sort((a, b) => a.nombre.localeCompare(b.nombre));
-  const semanaActualCoincidencias = buscandoHistorial ? finanzas.filter((f: any) => !f.es_gasto_5050 && coincideHistorial(f)) : [];
+  const semanaActualCoincidencias = buscandoHistorial ? finanzas.filter((f: any) => !f.es_gasto_5050 && f.tipo_pago !== "gastos" && coincideHistorial(f)) : [];
   const entregadoSemanaActual = semanaActualCoincidencias.reduce((suma: number, f: any) => suma + Number(f.ingreso_total || 0), 0);
 
   const aniosFinanzasOrdenados = Object.keys(historialVisible).sort((a, b) => {
@@ -1995,13 +2000,16 @@ export default function DashboardAgrimensura() {
                         <div className="inline-flex rounded-lg border border-zinc-700 overflow-hidden self-start">
                           <button type="button" onClick={() => cambiarTipoPago("entrega")} className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-colors ${nuevaFinanza.tipoPago === "entrega" ? "bg-[#727A4E] text-white" : "bg-[#222222] text-zinc-400 hover:text-white"}`}>Entrega</button>
                           <button type="button" onClick={() => cambiarTipoPago("saldo")} className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-colors ${nuevaFinanza.tipoPago === "saldo" ? "bg-yellow-600 text-white" : "bg-[#222222] text-zinc-400 hover:text-white"}`}>Saldo</button>
+                          <button type="button" onClick={() => cambiarTipoPago("gastos")} className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-colors ${nuevaFinanza.tipoPago === "gastos" ? "bg-red-700 text-white" : "bg-[#222222] text-zinc-400 hover:text-white"}`}>Gastos</button>
                         </div>
-                        <span className="text-[10px] md:text-xs text-zinc-500">{nuevaFinanza.tipoPago === "saldo" ? "Saldo: aportes y gastos del trámite en $0 (ya se descontaron en la entrega)." : "Entrega: se descuentan los aportes y los gastos del trámite."}</span>
+                        <span className="text-[10px] md:text-xs text-zinc-500">{nuevaFinanza.tipoPago === "gastos" ? "Gastos: sin ingreso. Todo arranca en $0; completá solo los gastos que corresponden a este expediente." : nuevaFinanza.tipoPago === "saldo" ? "Saldo: aportes y gastos del trámite en $0 (ya se descontaron en la entrega)." : "Entrega: se descuentan los aportes y los gastos del trámite."}</span>
                       </div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input ref={tipoInputRef} required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Entró por</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.encargado} onChange={e => actualizarValoresFinanza('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
-                      <div><label className="text-xs uppercase tracking-wider font-bold text-[#A4B070]">Ingreso Total ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-[#727A4E] bg-[#222222] p-3 rounded font-black text-[#A4B070] focus:outline-none focus:border-[#8B9461]" value={nuevaFinanza.ingreso === 0 ? "" : formatearPlata(nuevaFinanza.ingreso)} onChange={e => handlePlataInput('ingreso', e.target.value)} placeholder="0"/></div>
+                      {nuevaFinanza.tipoPago !== "gastos" && (
+                        <div><label className="text-xs uppercase tracking-wider font-bold text-[#A4B070]">Ingreso Total ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-[#727A4E] bg-[#222222] p-3 rounded font-black text-[#A4B070] focus:outline-none focus:border-[#8B9461]" value={nuevaFinanza.ingreso === 0 ? "" : formatearPlata(nuevaFinanza.ingreso)} onChange={e => handlePlataInput('ingreso', e.target.value)} placeholder="0"/></div>
+                      )}
                       <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 border border-zinc-800 rounded-lg p-3">
                         <div className="md:col-span-2 text-[10px] uppercase tracking-widest font-bold text-zinc-500">Aportes <span className="normal-case tracking-normal font-normal">(uno solo por expediente)</span></div>
                         <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Caja ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
@@ -2073,9 +2081,9 @@ export default function DashboardAgrimensura() {
                         const partes = calcularPartes(f);
                         return (
                           <tr key={f.id} className={`border-b border-zinc-800 hover:bg-[#2A2A2A] ${f.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
-                            <td className="p-4 font-bold text-zinc-200">{f.tipo_tramite} {f.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase tracking-wider">50/50</span>}{!f.es_gasto_5050 && f.tipo_pago && <span className={`ml-2 text-[10px] px-2 py-1 rounded uppercase tracking-wider ${f.tipo_pago === "saldo" ? "bg-yellow-900/30 text-yellow-400" : "bg-[#727A4E]/20 text-[#A4B070]"}`}>{f.tipo_pago}</span>}</td>
+                            <td className="p-4 font-bold text-zinc-200">{f.tipo_tramite} {f.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase tracking-wider">50/50</span>}{!f.es_gasto_5050 && f.tipo_pago && <span className={`ml-2 text-[10px] px-2 py-1 rounded uppercase tracking-wider ${f.tipo_pago === "saldo" ? "bg-yellow-900/30 text-yellow-400" : f.tipo_pago === "gastos" ? "bg-red-900/30 text-red-400" : "bg-[#727A4E]/20 text-[#A4B070]"}`}>{f.tipo_pago}</span>}</td>
                             <td className="p-4 text-zinc-400">{f.es_gasto_5050 ? <span className="font-bold text-zinc-300">Pagó {f.encargado}</span> : f.propietario}</td>
-                            <td className={`p-4 font-black ${f.es_gasto_5050 ? 'text-red-400' : 'text-[#A4B070]'}`}>${formatearPlata(f.es_gasto_5050 ? f.caja : f.ingreso_total)}</td>
+                            <td className={`p-4 font-black ${f.es_gasto_5050 || f.tipo_pago === "gastos" ? 'text-red-400' : 'text-[#A4B070]'}`}>${formatearPlata(f.es_gasto_5050 ? f.caja : f.tipo_pago === "gastos" ? partes.totalAportes : f.ingreso_total)}</td>
                             <td className="p-4 text-zinc-500">{f.es_gasto_5050 ? '-' : `$${formatearPlata(partes.totalAportes)}`}</td>
                             <td className={`p-4 font-bold ${partes.limpioLeo < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                             <td className={`p-4 font-bold ${partes.limpioBruno < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
@@ -2238,10 +2246,10 @@ export default function DashboardAgrimensura() {
                                                         const partes = calcularPartes(h);
                                                         return (
                                                           <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
-                                                            <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}{!h.es_gasto_5050 && h.tipo_pago && <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded uppercase ${h.tipo_pago === "saldo" ? "bg-yellow-900/30 text-yellow-400" : "bg-[#727A4E]/20 text-[#A4B070]"}`}>{h.tipo_pago}</span>}</td>
+                                                            <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}{!h.es_gasto_5050 && h.tipo_pago && <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded uppercase ${h.tipo_pago === "saldo" ? "bg-yellow-900/30 text-yellow-400" : h.tipo_pago === "gastos" ? "bg-red-900/30 text-red-400" : "bg-[#727A4E]/20 text-[#A4B070]"}`}>{h.tipo_pago}</span>}</td>
                                                             <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                             <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
-                                                            <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
+                                                            <td className={`p-3 font-bold ${h.es_gasto_5050 || h.tipo_pago === "gastos" ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.tipo_pago === "gastos" ? partes.totalAportes : h.ingreso_total)}</td>
                                                             <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
                                                             <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
                                                           </tr>
