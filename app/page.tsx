@@ -15,35 +15,52 @@ const escaparHTML = (s: any) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&
 const GASTO_CERTIFICADO = 20800;
 const GASTO_TITULO = 7500;
 const GASTO_SET = 5200;
-const GASTO_TITULO_SET = GASTO_TITULO + GASTO_SET;
 // Aportes de un expediente (uno solo, sin importar la cantidad de lotes).
 const APORTE_CAJA = 83000;
 const APORTE_COLEGIO = 69300;
 
-// Cómo se guardan los gastos: extra_leo / extra_bruno según quién los paga.
-const calcularExtras = (encargado: string, cantCert: number, cantTitulo: number) => {
+// Cómo se guardan los gastos: extra_leo / extra_bruno según quién los paga. El certificado lo paga quien carga
+// el expediente, el título y el SET siempre Bruno, y los extras de cada uno (viáticos, nafta, etc.) son de quien los puso.
+const calcularExtras = (encargado: string, cantCert: number, cantTitulo: number, cantSet: number, extraLeo = 0, extraBruno = 0) => {
   const certificado = cantCert * GASTO_CERTIFICADO;
-  const tituloSet = cantTitulo * GASTO_TITULO_SET;
-  return encargado === "Leo" ? { extraLeo: certificado, extraBruno: tituloSet } : { extraLeo: 0, extraBruno: certificado + tituloSet };
+  const tituloSet = cantTitulo * GASTO_TITULO + cantSet * GASTO_SET;
+  return encargado === "Leo"
+    ? { extraLeo: certificado + extraLeo, extraBruno: tituloSet + extraBruno }
+    : { extraLeo: extraLeo, extraBruno: certificado + tituloSet + extraBruno };
 };
 
-// Cantidades que reproducen exactamente los gastos guardados de un registro (o null si no hay forma).
-const derivarCantidades = (f: any) => {
+// Pasa los gastos guardados de un registro a cantidades + extras de cada uno. Lo que no salga de las
+// cantidades (con los valores actuales) queda como extra de quien lo pagó, así nunca cambia un monto.
+const derivarGastos = (f: any) => {
   const extraLeo = Number(f.extra_leo || 0), extraBruno = Number(f.extra_bruno || 0);
-  const reproduce = (c: number, t: number) => { const e = calcularExtras(f.encargado, c, t); return e.extraLeo === extraLeo && e.extraBruno === extraBruno; };
-  if (f.cant_certificado != null && f.cant_titulo_set != null && reproduce(Number(f.cant_certificado), Number(f.cant_titulo_set))) {
-    return { certificado: Number(f.cant_certificado), titulo: Number(f.cant_titulo_set) };
+  const conExtras = (c: number, t: number, s: number) => {
+    const e = calcularExtras(f.encargado, c, t, s);
+    const sobraLeo = extraLeo - e.extraLeo, sobraBruno = extraBruno - e.extraBruno;
+    return sobraLeo >= 0 && sobraBruno >= 0 ? { certificado: c, titulo: t, set: s, extraLeo: sobraLeo, extraBruno: sobraBruno } : null;
+  };
+  if (f.cant_certificado != null && f.cant_titulo != null && f.cant_set != null) {
+    const r = conExtras(Number(f.cant_certificado), Number(f.cant_titulo), Number(f.cant_set));
+    if (r) return r;
   }
-  for (let c = 0; c <= 20; c++) for (let t = 0; t <= 20; t++) if (reproduce(c, t)) return { certificado: c, titulo: t };
-  return null;
+  // Antes de separarlos, título y SET compartían una sola cantidad.
+  if (f.cant_certificado != null && f.cant_titulo_set != null) {
+    const r = conExtras(Number(f.cant_certificado), Number(f.cant_titulo_set), Number(f.cant_titulo_set));
+    if (r) return r;
+  }
+  // Registros sin cantidades: se busca la combinación que reproduce exactamente los gastos.
+  for (let c = 0; c <= 20; c++) for (let t = 0; t <= 20; t++) {
+    const r = conExtras(c, t, t);
+    if (r && r.extraLeo === 0 && r.extraBruno === 0) return r;
+  }
+  return { certificado: 0, titulo: 0, set: 0, extraLeo, extraBruno };
 };
 
 // Valores sugeridos al cargar: una entrega lleva aportes y gastos; un saldo va en cero.
 const valoresFinanzaPorDefecto = (tramite: string, tipoPago: string) => tipoPago === "saldo"
-  ? { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0 }
-  : { caja: APORTE_CAJA, colegio: APORTE_COLEGIO, cantCert: 1, cantTitulo: tramite.toUpperCase().includes("REP") ? 1 : 0 };
+  ? { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0 }
+  : { caja: APORTE_CAJA, colegio: APORTE_COLEGIO, cantCert: 1, cantTitulo: tramite.toUpperCase().includes("REP") ? 1 : 0, cantSet: tramite.toUpperCase().includes("REP") ? 1 : 0, extraLeo: 0, extraBruno: 0 };
 
-const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo", cantCert: 1, cantTitulo: 0, esGasto5050: false };
+const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo", cantCert: 1, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0, esGasto5050: false };
 
 const ETAPAS_BASE = [
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_medido', label: 'Medido' },
@@ -202,8 +219,6 @@ export default function DashboardAgrimensura() {
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
   const [nuevaFinanza, setNuevaFinanza] = useState(estadoFinanzaInicial);
-  // Gastos de un registro viejo que no salen de las cantidades con los valores actuales: se conservan tal cual.
-  const [extrasFijos, setExtrasFijos] = useState<{ leo: number; bruno: number } | null>(null);
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -356,31 +371,29 @@ export default function DashboardAgrimensura() {
   
   const actualizarValoresFinanza = (campo: string, valor: string) => {
     const siguiente: any = { ...nuevaFinanza, [campo]: valor };
-    // Al cambiar el tipo, el título + SET se sugiere solo en los REP (y no en un saldo).
-    if (campo === 'tramite' && !extrasFijos && nuevaFinanza.tipoPago === "entrega") siguiente.cantTitulo = valor.toUpperCase().includes("REP") ? 1 : 0;
+    // Al cargar un expediente nuevo, el título y el SET se sugieren solos en los REP (y no en un saldo).
+    if (campo === 'tramite' && !editandoFinanzaId && nuevaFinanza.tipoPago === "entrega") { const esREP = valor.toUpperCase().includes("REP"); siguiente.cantTitulo = esREP ? 1 : 0; siguiente.cantSet = esREP ? 1 : 0; }
     setNuevaFinanza(siguiente);
   };
 
   const cambiarTipoPago = (tipoPago: "entrega" | "saldo") => {
-    setExtrasFijos(null);
     setNuevaFinanza({ ...nuevaFinanza, tipoPago, ...valoresFinanzaPorDefecto(nuevaFinanza.tramite, tipoPago) });
   };
 
-  const ajustarCantidad = (campo: "cantCert" | "cantTitulo", delta: number) => {
+  const ajustarCantidad = (campo: "cantCert" | "cantTitulo" | "cantSet", delta: number) => {
     setNuevaFinanza({ ...nuevaFinanza, [campo]: Math.max(0, Math.min(20, nuevaFinanza[campo] + delta)) });
   };
 
   const toggleGasto5050 = () => {
-    setExtrasFijos(null);
-    if (!nuevaFinanza.esGasto5050) setNuevaFinanza({ ...nuevaFinanza, esGasto5050: true, tipoPago: "entrega", tramite: "Cuota CAJA", ingreso: 0, caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, propietario: "-" });
+    if (!nuevaFinanza.esGasto5050) setNuevaFinanza({ ...nuevaFinanza, esGasto5050: true, tipoPago: "entrega", tramite: "Cuota CAJA", ingreso: 0, caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0, propietario: "-" });
     else setNuevaFinanza({ ...estadoFinanzaInicial, encargado: nuevaFinanza.encargado });
   };
 
-  // Un contador de gasto (certificado o título + SET) con botones − / +.
-  const renderContadorGasto = (titulo: string, detalle: string, unitario: number, campo: "cantCert" | "cantTitulo", paga: string) => {
+  // Un contador de gasto (certificado, título o SET) con botones − / +.
+  const renderContadorGasto = (titulo: string, detalle: string, unitario: number, campo: "cantCert" | "cantTitulo" | "cantSet", paga: string) => {
     const cantidad = nuevaFinanza[campo];
     return (
-      <div className="bg-[#222222] rounded p-3 flex items-center justify-between gap-3">
+      <div className="bg-[#222222] rounded p-3 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wider font-bold text-zinc-300">{titulo}</div>
           <div className="text-[10px] text-zinc-500">{detalle} · paga {paga}</div>
@@ -746,32 +759,32 @@ export default function DashboardAgrimensura() {
 
   const guardarFinanza = async (e: any) => {
     e.preventDefault();
-    const extras = extrasFijos ? { extraLeo: extrasFijos.leo, extraBruno: extrasFijos.bruno } : calcularExtras(nuevaFinanza.encargado, nuevaFinanza.cantCert, nuevaFinanza.cantTitulo);
-    const conCantidades = !nuevaFinanza.esGasto5050 && !extrasFijos;
+    const extras = calcularExtras(nuevaFinanza.encargado, nuevaFinanza.cantCert, nuevaFinanza.cantTitulo, nuevaFinanza.cantSet, nuevaFinanza.extraLeo, nuevaFinanza.extraBruno);
+    const conCantidades = !nuevaFinanza.esGasto5050;
     const datosGuardar = {
       tipo_tramite: nuevaFinanza.tramite, propietario: nuevaFinanza.propietario, encargado: nuevaFinanza.encargado, ingreso_total: nuevaFinanza.ingreso,
       caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extra_leo: extras.extraLeo, extra_bruno: extras.extraBruno, es_gasto_5050: nuevaFinanza.esGasto5050,
       tipo_pago: nuevaFinanza.esGasto5050 ? null : nuevaFinanza.tipoPago,
       cant_certificado: conCantidades ? nuevaFinanza.cantCert : null,
-      cant_titulo_set: conCantidades ? nuevaFinanza.cantTitulo : null
+      cant_titulo: conCantidades ? nuevaFinanza.cantTitulo : null,
+      cant_set: conCantidades ? nuevaFinanza.cantSet : null,
+      cant_titulo_set: null
     };
     const { error } = editandoFinanzaId
       ? await supabase.from("finanzas").update(datosGuardar).eq("id", editandoFinanzaId)
       : await supabase.from("finanzas").insert([datosGuardar]);
     if (error) { alert(`No se pudo guardar el registro: ${error.message}`); return; }
     setEditandoFinanzaId(null);
-    setExtrasFijos(null);
     setNuevaFinanza(estadoFinanzaInicial);
     cargarDatos();
     setTimeout(() => { tipoInputRef.current?.focus(); }, 100);
   };
   const iniciarEdicionFinanza = (f: any) => {
     const extraLeo = Number(f.extra_leo || 0), extraBruno = Number(f.extra_bruno || 0);
-    const cant = f.es_gasto_5050 ? null : derivarCantidades(f);
+    const gastos = f.es_gasto_5050 ? { certificado: 0, titulo: 0, set: 0, extraLeo: 0, extraBruno: 0 } : derivarGastos(f);
     const sinGastos = Number(f.caja) === 0 && Number(f.colegio) === 0 && extraLeo === 0 && extraBruno === 0;
     setEditandoFinanzaId(f.id);
-    setExtrasFijos(f.es_gasto_5050 || cant ? null : { leo: extraLeo, bruno: extraBruno });
-    setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), tipoPago: f.tipo_pago || (sinGastos ? "saldo" : "entrega"), cantCert: cant?.certificado || 0, cantTitulo: cant?.titulo || 0, esGasto5050: f.es_gasto_5050 || false });
+    setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), tipoPago: f.tipo_pago || (sinGastos ? "saldo" : "entrega"), cantCert: gastos.certificado, cantTitulo: gastos.titulo, cantSet: gastos.set, extraLeo: gastos.extraLeo, extraBruno: gastos.extraBruno, esGasto5050: f.es_gasto_5050 || false });
   };
   const eliminarFinanza = async (id: string) => { if (confirm("¿Borrar registro?")) { await supabase.from("finanzas").delete().eq("id", id); cargarDatos(); } };
   
@@ -1994,19 +2007,16 @@ export default function DashboardAgrimensura() {
                         <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Caja ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
                         <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Colegio ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.colegio === 0 ? "" : formatearPlata(nuevaFinanza.colegio)} onChange={e => handlePlataInput('colegio', e.target.value)} placeholder="0"/></div>
                       </div>
+                      <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 border border-zinc-800 rounded-lg p-3">
+                        <div className="md:col-span-3 text-[10px] uppercase tracking-widest font-bold text-zinc-500">Gastos del trámite <span className="normal-case tracking-normal font-normal">(se multiplican por lote)</span></div>
+                        {renderContadorGasto("Certificado", `$${formatearPlata(GASTO_CERTIFICADO)} c/u`, GASTO_CERTIFICADO, "cantCert", nuevaFinanza.encargado)}
+                        {renderContadorGasto("Título", `$${formatearPlata(GASTO_TITULO)} c/u`, GASTO_TITULO, "cantTitulo", "Bruno")}
+                        {renderContadorGasto("SET", `$${formatearPlata(GASTO_SET)} c/u`, GASTO_SET, "cantSet", "Bruno")}
+                      </div>
                       <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 border border-zinc-800 rounded-lg p-3">
-                        <div className="md:col-span-2 text-[10px] uppercase tracking-widest font-bold text-zinc-500">Gastos del trámite <span className="normal-case tracking-normal font-normal">(se multiplican por lote)</span></div>
-                        {extrasFijos ? (
-                          <div className="md:col-span-2 bg-yellow-900/20 border border-yellow-800/50 rounded p-3 text-xs text-yellow-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <span>Este registro tiene gastos cargados con valores anteriores (Leo ${formatearPlata(extrasFijos.leo)} · Bruno ${formatearPlata(extrasFijos.bruno)}). Se mantienen al guardar.</span>
-                            <button type="button" onClick={() => { const d = valoresFinanzaPorDefecto(nuevaFinanza.tramite, nuevaFinanza.tipoPago); setExtrasFijos(null); setNuevaFinanza({ ...nuevaFinanza, cantCert: d.cantCert, cantTitulo: d.cantTitulo }); }} className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">Usar valores actuales</button>
-                          </div>
-                        ) : (
-                          <>
-                            {renderContadorGasto("Certificado", `$${formatearPlata(GASTO_CERTIFICADO)} c/u`, GASTO_CERTIFICADO, "cantCert", nuevaFinanza.encargado)}
-                            {renderContadorGasto("Título + SET", `$${formatearPlata(GASTO_TITULO)} + $${formatearPlata(GASTO_SET)} c/u`, GASTO_TITULO_SET, "cantTitulo", "Bruno")}
-                          </>
-                        )}
+                        <div className="md:col-span-2 text-[10px] uppercase tracking-widest font-bold text-zinc-500">Extras de cada uno <span className="normal-case tracking-normal font-normal">(viáticos, nafta, lavado, comida, etc.)</span></div>
+                        <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Leo ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraLeo === 0 ? "" : formatearPlata(nuevaFinanza.extraLeo)} onChange={e => handlePlataInput('extraLeo', e.target.value)} placeholder="0"/></div>
+                        <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Bruno ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraBruno === 0 ? "" : formatearPlata(nuevaFinanza.extraBruno)} onChange={e => handlePlataInput('extraBruno', e.target.value)} placeholder="0"/></div>
                       </div>
                     </>
                   ) : (
@@ -2017,7 +2027,7 @@ export default function DashboardAgrimensura() {
                     </>
                   )}
                   <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row justify-end gap-3 mt-4">
-                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza(estadoFinanzaInicial); setExtrasFijos(null);}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
+                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza(estadoFinanzaInicial);}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
                     <button type="submit" className={`w-full sm:w-auto px-8 py-3 rounded text-white text-xs font-black tracking-widest uppercase shadow-md transition-colors ${editandoFinanzaId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoFinanzaId ? "GUARDAR" : "CARGAR"}</button>
                   </div>
                 </form>
