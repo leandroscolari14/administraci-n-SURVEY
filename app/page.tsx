@@ -10,8 +10,40 @@ const urlGoogleMaps = (lat: any, lng: any) => `https://www.google.com/maps/searc
 
 const escaparHTML = (s: any) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 
-// Gasto fijo que se suma en los trámites REP (incluye el costo de la escritura).
-const GASTO_EXTRA_REP = 12700;
+// Gastos del trámite que se cargan por separado en Finanzas y se multiplican por la cantidad de lotes.
+// El certificado lo paga quien carga el expediente; el título y el SET los paga siempre Bruno.
+const GASTO_CERTIFICADO = 20800;
+const GASTO_TITULO = 7500;
+const GASTO_SET = 5200;
+const GASTO_TITULO_SET = GASTO_TITULO + GASTO_SET;
+// Aportes de un expediente (uno solo, sin importar la cantidad de lotes).
+const APORTE_CAJA = 83000;
+const APORTE_COLEGIO = 69300;
+
+// Cómo se guardan los gastos: extra_leo / extra_bruno según quién los paga.
+const calcularExtras = (encargado: string, cantCert: number, cantTitulo: number) => {
+  const certificado = cantCert * GASTO_CERTIFICADO;
+  const tituloSet = cantTitulo * GASTO_TITULO_SET;
+  return encargado === "Leo" ? { extraLeo: certificado, extraBruno: tituloSet } : { extraLeo: 0, extraBruno: certificado + tituloSet };
+};
+
+// Cantidades que reproducen exactamente los gastos guardados de un registro (o null si no hay forma).
+const derivarCantidades = (f: any) => {
+  const extraLeo = Number(f.extra_leo || 0), extraBruno = Number(f.extra_bruno || 0);
+  const reproduce = (c: number, t: number) => { const e = calcularExtras(f.encargado, c, t); return e.extraLeo === extraLeo && e.extraBruno === extraBruno; };
+  if (f.cant_certificado != null && f.cant_titulo_set != null && reproduce(Number(f.cant_certificado), Number(f.cant_titulo_set))) {
+    return { certificado: Number(f.cant_certificado), titulo: Number(f.cant_titulo_set) };
+  }
+  for (let c = 0; c <= 20; c++) for (let t = 0; t <= 20; t++) if (reproduce(c, t)) return { certificado: c, titulo: t };
+  return null;
+};
+
+// Valores sugeridos al cargar: una entrega lleva aportes y gastos; un saldo va en cero.
+const valoresFinanzaPorDefecto = (tramite: string, tipoPago: string) => tipoPago === "saldo"
+  ? { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0 }
+  : { caja: APORTE_CAJA, colegio: APORTE_COLEGIO, cantCert: 1, cantTitulo: tramite.toUpperCase().includes("REP") ? 1 : 0 };
+
+const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo", cantCert: 1, cantTitulo: 0, esGasto5050: false };
 
 const ETAPAS_BASE = [
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_medido', label: 'Medido' },
@@ -169,7 +201,9 @@ export default function DashboardAgrimensura() {
   const [trabajoResaltadoId, setTrabajoResaltadoId] = useState<string | null>(null);
   
   const [editandoFinanzaId, setEditandoFinanzaId] = useState<string | null>(null);
-  const [nuevaFinanza, setNuevaFinanza] = useState({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });
+  const [nuevaFinanza, setNuevaFinanza] = useState(estadoFinanzaInicial);
+  // Gastos de un registro viejo que no salen de las cantidades con los valores actuales: se conservan tal cual.
+  const [extrasFijos, setExtrasFijos] = useState<{ leo: number; bruno: number } | null>(null);
 
   const [filtroEncargado, setFiltroEncargado] = useState("Todos");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -321,17 +355,44 @@ export default function DashboardAgrimensura() {
   const handlePlataInput = (campo: string, valorStr: string) => { const valorLimpio = valorStr.replace(/\D/g, ''); setNuevaFinanza({ ...nuevaFinanza, [campo]: Number(valorLimpio) }); };
   
   const actualizarValoresFinanza = (campo: string, valor: string) => {
-    let nuevoTramite = campo === 'tramite' ? valor : nuevaFinanza.tramite;
-    let nuevoEncargado = campo === 'encargado' ? valor : nuevaFinanza.encargado;
-    let eLeo = 0, eBruno = 0;
-    const esREP = nuevoTramite.toUpperCase().includes("REP");
-    if (nuevoEncargado === "Leo") { eLeo = 20800; eBruno = esREP ? GASTO_EXTRA_REP : 0; } else { eLeo = 0; eBruno = esREP ? (20800 + GASTO_EXTRA_REP) : 20800; }
-    setNuevaFinanza({ ...nuevaFinanza, [campo]: valor, extraLeo: eLeo, extraBruno: eBruno });
+    const siguiente: any = { ...nuevaFinanza, [campo]: valor };
+    // Al cambiar el tipo, el título + SET se sugiere solo en los REP (y no en un saldo).
+    if (campo === 'tramite' && !extrasFijos && nuevaFinanza.tipoPago === "entrega") siguiente.cantTitulo = valor.toUpperCase().includes("REP") ? 1 : 0;
+    setNuevaFinanza(siguiente);
+  };
+
+  const cambiarTipoPago = (tipoPago: "entrega" | "saldo") => {
+    setExtrasFijos(null);
+    setNuevaFinanza({ ...nuevaFinanza, tipoPago, ...valoresFinanzaPorDefecto(nuevaFinanza.tramite, tipoPago) });
+  };
+
+  const ajustarCantidad = (campo: "cantCert" | "cantTitulo", delta: number) => {
+    setNuevaFinanza({ ...nuevaFinanza, [campo]: Math.max(0, Math.min(20, nuevaFinanza[campo] + delta)) });
   };
 
   const toggleGasto5050 = () => {
-    if (!nuevaFinanza.esGasto5050) setNuevaFinanza({ ...nuevaFinanza, esGasto5050: true, tramite: "Cuota CAJA", ingreso: 0, caja: 0, colegio: 0, extraLeo: 0, extraBruno: 0, propietario: "-" });
-    else setNuevaFinanza({ ...nuevaFinanza, esGasto5050: false, tramite: "VEP", propietario: "", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0 });
+    setExtrasFijos(null);
+    if (!nuevaFinanza.esGasto5050) setNuevaFinanza({ ...nuevaFinanza, esGasto5050: true, tipoPago: "entrega", tramite: "Cuota CAJA", ingreso: 0, caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, propietario: "-" });
+    else setNuevaFinanza({ ...estadoFinanzaInicial, encargado: nuevaFinanza.encargado });
+  };
+
+  // Un contador de gasto (certificado o título + SET) con botones − / +.
+  const renderContadorGasto = (titulo: string, detalle: string, unitario: number, campo: "cantCert" | "cantTitulo", paga: string) => {
+    const cantidad = nuevaFinanza[campo];
+    return (
+      <div className="bg-[#222222] rounded p-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-wider font-bold text-zinc-300">{titulo}</div>
+          <div className="text-[10px] text-zinc-500">{detalle} · paga {paga}</div>
+          <div className="text-sm font-black text-white mt-1">${formatearPlata(unitario * cantidad)}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button type="button" onClick={() => ajustarCantidad(campo, -1)} disabled={cantidad <= 0} className="w-9 h-9 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 text-lg font-black text-white" title="Quitar uno">−</button>
+          <span className="w-6 text-center font-black text-white">{cantidad}</span>
+          <button type="button" onClick={() => ajustarCantidad(campo, 1)} className="w-9 h-9 rounded bg-zinc-800 hover:bg-zinc-700 text-lg font-black text-white" title="Agregar uno">+</button>
+        </div>
+      </div>
+    );
   };
 
   const parsearCoordenadasPegadas = (texto: string) => {
@@ -685,14 +746,33 @@ export default function DashboardAgrimensura() {
 
   const guardarFinanza = async (e: any) => {
     e.preventDefault();
-    const datosGuardar = { tipo_tramite: nuevaFinanza.tramite, propietario: nuevaFinanza.propietario, encargado: nuevaFinanza.encargado, ingreso_total: nuevaFinanza.ingreso, caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extra_leo: nuevaFinanza.extraLeo, extra_bruno: nuevaFinanza.extraBruno, es_gasto_5050: nuevaFinanza.esGasto5050 };
-    if (editandoFinanzaId) { await supabase.from("finanzas").update(datosGuardar).eq("id", editandoFinanzaId); setEditandoFinanzaId(null); } 
-    else await supabase.from("finanzas").insert([datosGuardar]);
-    setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });
+    const extras = extrasFijos ? { extraLeo: extrasFijos.leo, extraBruno: extrasFijos.bruno } : calcularExtras(nuevaFinanza.encargado, nuevaFinanza.cantCert, nuevaFinanza.cantTitulo);
+    const conCantidades = !nuevaFinanza.esGasto5050 && !extrasFijos;
+    const datosGuardar = {
+      tipo_tramite: nuevaFinanza.tramite, propietario: nuevaFinanza.propietario, encargado: nuevaFinanza.encargado, ingreso_total: nuevaFinanza.ingreso,
+      caja: nuevaFinanza.caja, colegio: nuevaFinanza.colegio, extra_leo: extras.extraLeo, extra_bruno: extras.extraBruno, es_gasto_5050: nuevaFinanza.esGasto5050,
+      tipo_pago: nuevaFinanza.esGasto5050 ? null : nuevaFinanza.tipoPago,
+      cant_certificado: conCantidades ? nuevaFinanza.cantCert : null,
+      cant_titulo_set: conCantidades ? nuevaFinanza.cantTitulo : null
+    };
+    const { error } = editandoFinanzaId
+      ? await supabase.from("finanzas").update(datosGuardar).eq("id", editandoFinanzaId)
+      : await supabase.from("finanzas").insert([datosGuardar]);
+    if (error) { alert(`No se pudo guardar el registro: ${error.message}`); return; }
+    setEditandoFinanzaId(null);
+    setExtrasFijos(null);
+    setNuevaFinanza(estadoFinanzaInicial);
     cargarDatos();
     setTimeout(() => { tipoInputRef.current?.focus(); }, 100);
   };
-  const iniciarEdicionFinanza = (f: any) => { setEditandoFinanzaId(f.id); setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), extraLeo: Number(f.extra_leo || 0), extraBruno: Number(f.extra_bruno || 0), esGasto5050: f.es_gasto_5050 || false }); };
+  const iniciarEdicionFinanza = (f: any) => {
+    const extraLeo = Number(f.extra_leo || 0), extraBruno = Number(f.extra_bruno || 0);
+    const cant = f.es_gasto_5050 ? null : derivarCantidades(f);
+    const sinGastos = Number(f.caja) === 0 && Number(f.colegio) === 0 && extraLeo === 0 && extraBruno === 0;
+    setEditandoFinanzaId(f.id);
+    setExtrasFijos(f.es_gasto_5050 || cant ? null : { leo: extraLeo, bruno: extraBruno });
+    setNuevaFinanza({ tramite: f.tipo_tramite, propietario: f.propietario, encargado: f.encargado, ingreso: Number(f.ingreso_total), caja: Number(f.caja), colegio: Number(f.colegio), tipoPago: f.tipo_pago || (sinGastos ? "saldo" : "entrega"), cantCert: cant?.certificado || 0, cantTitulo: cant?.titulo || 0, esGasto5050: f.es_gasto_5050 || false });
+  };
   const eliminarFinanza = async (id: string) => { if (confirm("¿Borrar registro?")) { await supabase.from("finanzas").delete().eq("id", id); cargarDatos(); } };
   
   const liquidarSemana = async () => {
@@ -1889,14 +1969,36 @@ export default function DashboardAgrimensura() {
                 <form onSubmit={guardarFinanza} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                   {!nuevaFinanza.esGasto5050 ? (
                     <>
+                      <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="inline-flex rounded-lg border border-zinc-700 overflow-hidden self-start">
+                          <button type="button" onClick={() => cambiarTipoPago("entrega")} className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-colors ${nuevaFinanza.tipoPago === "entrega" ? "bg-[#727A4E] text-white" : "bg-[#222222] text-zinc-400 hover:text-white"}`}>Entrega</button>
+                          <button type="button" onClick={() => cambiarTipoPago("saldo")} className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-colors ${nuevaFinanza.tipoPago === "saldo" ? "bg-yellow-600 text-white" : "bg-[#222222] text-zinc-400 hover:text-white"}`}>Saldo</button>
+                        </div>
+                        <span className="text-[10px] md:text-xs text-zinc-500">{nuevaFinanza.tipoPago === "saldo" ? "Saldo: aportes y gastos del trámite en $0 (ya se descontaron en la entrega)." : "Entrega: se descuentan los aportes y los gastos del trámite."}</span>
+                      </div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Tipo</label><input ref={tipoInputRef} required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.tramite} onChange={e => actualizarValoresFinanza('tramite', e.target.value)}/></div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Propietario</label><input required className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.propietario} onChange={e => setNuevaFinanza({...nuevaFinanza, propietario: e.target.value})}/></div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#727A4E]">Entró por</label><select className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.encargado} onChange={e => actualizarValoresFinanza('encargado', e.target.value)}><option value="Leo">Leo</option><option value="Bruno">Bruno</option></select></div>
                       <div><label className="text-xs uppercase tracking-wider font-bold text-[#A4B070]">Ingreso Total ($)</label><input type="text" inputMode="numeric" required className="w-full border-b-2 border-[#727A4E] bg-[#222222] p-3 rounded font-black text-[#A4B070] focus:outline-none focus:border-[#8B9461]" value={nuevaFinanza.ingreso === 0 ? "" : formatearPlata(nuevaFinanza.ingreso)} onChange={e => handlePlataInput('ingreso', e.target.value)} placeholder="0"/></div>
-                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Caja ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
-                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Colegio ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.colegio === 0 ? "" : formatearPlata(nuevaFinanza.colegio)} onChange={e => handlePlataInput('colegio', e.target.value)} placeholder="0"/></div>
-                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Leo ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraLeo === 0 ? "" : formatearPlata(nuevaFinanza.extraLeo)} onChange={e => handlePlataInput('extraLeo', e.target.value)} placeholder="0"/></div>
-                      <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Extra Bruno ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.extraBruno === 0 ? "" : formatearPlata(nuevaFinanza.extraBruno)} onChange={e => handlePlataInput('extraBruno', e.target.value)} placeholder="0"/></div>
+                      <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 border border-zinc-800 rounded-lg p-3">
+                        <div className="md:col-span-2 text-[10px] uppercase tracking-widest font-bold text-zinc-500">Aportes <span className="normal-case tracking-normal font-normal">(uno solo por expediente)</span></div>
+                        <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Caja ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.caja === 0 ? "" : formatearPlata(nuevaFinanza.caja)} onChange={e => handlePlataInput('caja', e.target.value)} placeholder="0"/></div>
+                        <div><label className="text-xs uppercase tracking-wider font-bold text-zinc-500">Colegio ($)</label><input type="text" inputMode="numeric" className="w-full border-b-2 border-zinc-700 bg-[#222222] text-white p-3 rounded focus:outline-none focus:border-[#727A4E]" value={nuevaFinanza.colegio === 0 ? "" : formatearPlata(nuevaFinanza.colegio)} onChange={e => handlePlataInput('colegio', e.target.value)} placeholder="0"/></div>
+                      </div>
+                      <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 border border-zinc-800 rounded-lg p-3">
+                        <div className="md:col-span-2 text-[10px] uppercase tracking-widest font-bold text-zinc-500">Gastos del trámite <span className="normal-case tracking-normal font-normal">(se multiplican por lote)</span></div>
+                        {extrasFijos ? (
+                          <div className="md:col-span-2 bg-yellow-900/20 border border-yellow-800/50 rounded p-3 text-xs text-yellow-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <span>Este registro tiene gastos cargados con valores anteriores (Leo ${formatearPlata(extrasFijos.leo)} · Bruno ${formatearPlata(extrasFijos.bruno)}). Se mantienen al guardar.</span>
+                            <button type="button" onClick={() => { const d = valoresFinanzaPorDefecto(nuevaFinanza.tramite, nuevaFinanza.tipoPago); setExtrasFijos(null); setNuevaFinanza({ ...nuevaFinanza, cantCert: d.cantCert, cantTitulo: d.cantTitulo }); }} className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">Usar valores actuales</button>
+                          </div>
+                        ) : (
+                          <>
+                            {renderContadorGasto("Certificado", `$${formatearPlata(GASTO_CERTIFICADO)} c/u`, GASTO_CERTIFICADO, "cantCert", nuevaFinanza.encargado)}
+                            {renderContadorGasto("Título + SET", `$${formatearPlata(GASTO_TITULO)} + $${formatearPlata(GASTO_SET)} c/u`, GASTO_TITULO_SET, "cantTitulo", "Bruno")}
+                          </>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <>
@@ -1906,7 +2008,7 @@ export default function DashboardAgrimensura() {
                     </>
                   )}
                   <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row justify-end gap-3 mt-4">
-                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza({ tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: 83000, colegio: 69300, extraLeo: 20800, extraBruno: 0, esGasto5050: false });}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
+                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza(estadoFinanzaInicial); setExtrasFijos(null);}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
                     <button type="submit" className={`w-full sm:w-auto px-8 py-3 rounded text-white text-xs font-black tracking-widest uppercase shadow-md transition-colors ${editandoFinanzaId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoFinanzaId ? "GUARDAR" : "CARGAR"}</button>
                   </div>
                 </form>
@@ -1952,7 +2054,7 @@ export default function DashboardAgrimensura() {
                         const partes = calcularPartes(f);
                         return (
                           <tr key={f.id} className={`border-b border-zinc-800 hover:bg-[#2A2A2A] ${f.es_gasto_5050 ? 'bg-[#1E1E1E]' : ''}`}>
-                            <td className="p-4 font-bold text-zinc-200">{f.tipo_tramite} {f.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase tracking-wider">50/50</span>}</td>
+                            <td className="p-4 font-bold text-zinc-200">{f.tipo_tramite} {f.es_gasto_5050 && <span className="ml-2 text-[10px] bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase tracking-wider">50/50</span>}{!f.es_gasto_5050 && f.tipo_pago && <span className={`ml-2 text-[10px] px-2 py-1 rounded uppercase tracking-wider ${f.tipo_pago === "saldo" ? "bg-yellow-900/30 text-yellow-400" : "bg-[#727A4E]/20 text-[#A4B070]"}`}>{f.tipo_pago}</span>}</td>
                             <td className="p-4 text-zinc-400">{f.es_gasto_5050 ? <span className="font-bold text-zinc-300">Pagó {f.encargado}</span> : f.propietario}</td>
                             <td className={`p-4 font-black ${f.es_gasto_5050 ? 'text-red-400' : 'text-[#A4B070]'}`}>${formatearPlata(f.es_gasto_5050 ? f.caja : f.ingreso_total)}</td>
                             <td className="p-4 text-zinc-500">{f.es_gasto_5050 ? '-' : `$${formatearPlata(partes.totalAportes)}`}</td>
@@ -2117,7 +2219,7 @@ export default function DashboardAgrimensura() {
                                                         const partes = calcularPartes(h);
                                                         return (
                                                           <tr key={h.id} className={`border-b border-zinc-800 text-xs ${h.es_gasto_5050 ? 'bg-[#181818]' : ''}`}>
-                                                            <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}</td>
+                                                            <td className="p-3 font-bold text-zinc-300">{h.tipo_tramite} {h.es_gasto_5050 && <span className="ml-2 text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">50/50</span>}{!h.es_gasto_5050 && h.tipo_pago && <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded uppercase ${h.tipo_pago === "saldo" ? "bg-yellow-900/30 text-yellow-400" : "bg-[#727A4E]/20 text-[#A4B070]"}`}>{h.tipo_pago}</span>}</td>
                                                             <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                             <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
                                                             <td className={`p-3 font-bold ${h.es_gasto_5050 ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.ingreso_total)}</td>
