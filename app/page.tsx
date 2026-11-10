@@ -823,7 +823,16 @@ export default function DashboardAgrimensura() {
     let cobradoLeo = 0, cobradoBruno = 0, gastosSalientesLeo = 0, gastosSalientesBruno = 0, gananciaPuraLeo = 0, gananciaPuraBruno = 0, deuda5050Leo = 0, deuda5050Bruno = 0;
     lista.forEach((f: any) => {
       if (f.es_gasto_5050) { const gasto = Number(f.caja); deuda5050Leo += gasto / 2; deuda5050Bruno += gasto / 2; if (f.encargado === "Leo") gastosSalientesLeo += gasto; else gastosSalientesBruno += gasto; } 
-      else { const partes = calcularPartes(f); gananciaPuraLeo += partes.limpioLeo; gananciaPuraBruno += partes.limpioBruno; if (f.encargado === "Leo") { cobradoLeo += Number(f.ingreso_total); gastosSalientesLeo += partes.totalAportes; } else { cobradoBruno += Number(f.ingreso_total); gastosSalientesBruno += partes.totalAportes; } }
+      else {
+        const partes = calcularPartes(f);
+        gananciaPuraLeo += partes.limpioLeo; gananciaPuraBruno += partes.limpioBruno;
+        // El ingreso lo cobra quien cargó el expediente, y los aportes también los paga él. Los gastos extra
+        // se le cuentan a quien los pagó (extra_leo a Leo, extra_bruno a Bruno), aunque el trabajo sea del otro.
+        const aportes = Number(f.caja) + Number(f.colegio);
+        gastosSalientesLeo += Number(f.extra_leo || 0) + (f.encargado === "Leo" ? aportes : 0);
+        gastosSalientesBruno += Number(f.extra_bruno || 0) + (f.encargado === "Bruno" ? aportes : 0);
+        if (f.encargado === "Leo") cobradoLeo += Number(f.ingreso_total); else cobradoBruno += Number(f.ingreso_total);
+      }
     });
     return { cobradoLeo, limpioLeoTotal: gananciaPuraLeo, gastosLeo: gastosSalientesLeo, balanceLeo: (cobradoLeo - gastosSalientesLeo) - (gananciaPuraLeo - deuda5050Leo), cobradoBruno, limpioBrunoTotal: gananciaPuraBruno, gastosBruno: gastosSalientesBruno, balanceBruno: (cobradoBruno - gastosSalientesBruno) - (gananciaPuraBruno - deuda5050Bruno) };
   };
