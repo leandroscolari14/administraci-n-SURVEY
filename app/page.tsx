@@ -63,14 +63,14 @@ const valoresFinanzaPorDefecto = (tramite: string, tipoPago: string) => tipoPago
 const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo" | "gastos", cantCert: 1, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0, esGasto5050: false };
 
 const ETAPAS_BASE = [
-  { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_medido', label: 'Medido' },
+  { id: 'e_solicitado_ld', label: 'Solicitar LD' }, { id: 'e_medido', label: 'Medir' },
   { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definir' }, { id: 'e_fac', label: 'FAC' },
-  { id: 'e_saca', label: 'SACA' }, { id: 'e_scit', label: 'SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
-  { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
+  { id: 'e_saca', label: 'SACA' }, { id: 'e_scit', label: 'SCIT' }, { id: 'e_pedido_cc', label: 'Pedir CC' },
+  { id: 'e_aprobado', label: 'Aprobado' }
 ];
 
 const ETAPAS_FAC = [
-  { id: 'e_medido', label: 'Medido' }, { id: 'e_dibujado', label: 'Dibujado' },
+  { id: 'e_medido', label: 'Medir' }, { id: 'e_dibujado', label: 'Dibujado' },
   { id: 'e_iniciado', label: 'Iniciado' }, { id: 'e_aprobado', label: 'Aprobado' }
 ];
 
@@ -92,7 +92,7 @@ const obtenerEtapasParaTrabajo = (t: any) => {
     etapas = [...etapas.slice(0, posAprobado), { id: 'e_visado', label: 'Visado' }, ...etapas.slice(posAprobado)];
   }
   if (!tieneCC) {
-    etapas = etapas.filter(e => e.id !== 'e_cc_emitido').concat([{ id: 'e_registrado', label: 'Registrado' }]);
+    etapas = [...etapas, { id: 'e_registrado', label: 'Registrado' }];
   }
   return etapas;
 };
@@ -104,6 +104,13 @@ const ETAPAS_MULTIFASE: Record<string, { columnas: string[]; fases: string[]; te
   e_fac: { columnas: ['e_fac', 'e_fac_aprobado'], fases: ['sin iniciar', 'iniciado', 'aprobado'] },
   e_visado: { columnas: ['e_visado', 'e_visado_aprobado'], fases: ['sin iniciar', 'iniciado', 'aprobado'] },
   e_aportes_generados: { columnas: ['e_aportes_generados', 'e_aportes_pagados'], fases: ['sin generar', 'generados', 'pagados'] },
+  e_medido: { columnas: ['e_medido'], fases: ['medir', 'medido'], textos: ['Medir', 'Medido'] },
+  e_solicitado_ld: { columnas: ['e_solicitado_ld'], fases: ['solicitar', 'solicitado'], textos: ['Solicitar LD', 'Solicitado LD'] },
+  e_pedido_cc: {
+    columnas: ['e_pedido_cc', 'e_cc_emitido'],
+    fases: ['pedir', 'pedido', 'emitido'],
+    textos: ['Pedir CC', 'CC pedido', 'CC emitido'],
+  },
   e_definido: { columnas: ['e_definido', 'e_definido_dibujado'], fases: ['definir', 'dibujar', 'dibujado'], textos: ['Definir', 'Dibujar', 'Dibujado'] },
   e_saca: { columnas: ['e_saca', 'e_saca_cerrado'], fases: ['sin ingresar', 'ingresado', 'cerrado'], textos: ['SACA', 'SACA ingresado', 'SACA cerrado'] },
   e_scit: {
