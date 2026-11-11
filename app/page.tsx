@@ -327,6 +327,22 @@ export default function DashboardAgrimensura() {
     return () => clearInterval(intervalo);
   }, [catastro]);
 
+  // El estado del SCIT se muestra en todas las pantallas, así que se actualiza solo (también cuando el otro socio
+  // lo cambia desde la app o desde Telegram) y al volver a la pestaña del navegador.
+  useEffect(() => {
+    if (!session) return;
+    const refrescar = async () => {
+      const { data } = await supabase.from("estado_catastro").select("*").limit(1);
+      if (!data || data.length === 0) return;
+      const nuevo = { usuario: data[0].usuario, fecha: data[0].fecha_actualizacion, liberadoPor: data[0].liberado_por || "", fechaLiberacion: data[0].fecha_liberacion || "" };
+      setCatastro((prev) => JSON.stringify(prev) === JSON.stringify(nuevo) ? prev : nuevo);
+    };
+    const intervalo = setInterval(refrescar, 10000);
+    const alVolver = () => { if (document.visibilityState === "visible") refrescar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => { clearInterval(intervalo); document.removeEventListener("visibilitychange", alVolver); };
+  }, [session]);
+
   const cargarDatos = async () => {
     const { data: dataTrabajos } = await supabase.from("trabajos_curso").select("*").order("id", { ascending: true });
     const { data: dataFinanzas } = await supabase.from("finanzas").select("*").eq("liquidado", false);
@@ -363,6 +379,9 @@ export default function DashboardAgrimensura() {
     } catch (error) { console.error(error); }
   };
 
+  // Quién está usando la app, según la sesión iniciada.
+  const miNombre = NOMBRE_POR_EMAIL[session?.user?.email || ""] || session?.user?.email || "";
+
   const tomarCatastro = async (nombre: string) => {
     const nuevaFecha = new Date().toISOString();
     await supabase.from("estado_catastro").update({ usuario: nombre, fecha_actualizacion: nuevaFecha }).eq("id", 1);
@@ -371,16 +390,18 @@ export default function DashboardAgrimensura() {
   };
 
   const liberarCatastro = async () => {
+    // Se puede liberar aunque figure a nombre del otro (por ejemplo si se olvidó de hacerlo), pero se confirma.
+    const delOtro = catastro.usuario !== "Libre" && catastro.usuario !== miNombre;
+    if (delOtro && !confirm(`El SCIT figura en uso por ${catastro.usuario}. ¿Liberarlo igual?`)) return;
     const ahora = new Date().toISOString();
-    const email = session?.user?.email || "";
     await supabase.from("estado_catastro").update({
       usuario: "Libre",
       fecha_actualizacion: ahora,
-      liberado_por: NOMBRE_POR_EMAIL[email] || email,
+      liberado_por: miNombre,
       fecha_liberacion: ahora
     }).eq("id", 1);
     cargarDatos();
-    await enviarTelegram(`🟢 *SISTEMA LIBERADO*\n\nEl sistema SCIT ya está disponible nuevamente.`);
+    await enviarTelegram(`🟢 *SISTEMA LIBERADO*\n\nEl sistema SCIT ya está disponible nuevamente.${delOtro ? `\n(Lo liberó ${miNombre}; figuraba a nombre de ${catastro.usuario}.)` : ""}`);
   };
 
   const formatearPlata = (monto: any) => new Intl.NumberFormat("es-AR").format(Number(monto));
@@ -1419,6 +1440,26 @@ export default function DashboardAgrimensura() {
         </div>
       </header>
 
+      {/* ESTADO DEL SCIT (siempre visible) */}
+      <div className={`mb-6 md:mb-8 rounded-xl border-2 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${catastro.usuario === "Libre" ? "bg-green-950/40 border-green-600/60" : "bg-red-950/50 border-red-500/70"}`}>
+        <div className="flex-1 min-w-0">
+          <div className={`font-black uppercase tracking-widest text-sm md:text-base ${catastro.usuario === "Libre" ? "text-green-400" : "text-red-400"}`}>
+            {catastro.usuario === "Libre" ? "✅ SCIT libre" : `🚫 SCIT en uso por ${catastro.usuario}${catastro.usuario === miNombre ? " (vos)" : ""}`}
+            {catastro.usuario !== "Libre" && tiempoUso && <span className="ml-3 text-zinc-200 font-bold normal-case tracking-normal">⏱️ {tiempoUso}</span>}
+          </div>
+          {catastro.fechaLiberacion && (
+            <div className="text-[11px] md:text-xs text-zinc-400 mt-0.5">
+              🔓 Última liberación: {new Date(catastro.fechaLiberacion).toLocaleString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })} hs{catastro.liberadoPor ? ` · por ${catastro.liberadoPor}` : ""}
+            </div>
+          )}
+        </div>
+        {catastro.usuario === "Libre" ? (
+          <button onClick={() => tomarCatastro(miNombre)} className="bg-[#727A4E] hover:bg-[#8B9461] text-white font-black text-xs md:text-sm px-6 py-2.5 rounded-lg uppercase tracking-widest shadow-md whitespace-nowrap">🙋‍♂️ Usar SCIT</button>
+        ) : (
+          <button onClick={liberarCatastro} className="bg-green-600 hover:bg-green-700 text-white font-black text-xs md:text-sm px-6 py-2.5 rounded-lg uppercase tracking-widest shadow-md whitespace-nowrap">🔓 Liberar SCIT</button>
+        )}
+      </div>
+
       {/* PESTAÑA: DASHBOARD & MAPA */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
@@ -1986,10 +2027,7 @@ export default function DashboardAgrimensura() {
             )}
             <div className="flex flex-col sm:flex-row gap-4 justify-center mt-4">
               {catastro.usuario === "Libre" ? (
-                <>
-                  <button onClick={() => tomarCatastro("Leo")} className="bg-[#1A1A1A] hover:bg-[#333] text-white text-lg md:text-xl font-bold px-8 py-4 rounded-xl shadow-lg uppercase tracking-widest w-full sm:w-auto">🙋‍♂️ Usar (Leo)</button>
-                  <button onClick={() => tomarCatastro("Bruno")} className="bg-[#727A4E] hover:bg-[#5E653F] text-white text-lg md:text-xl font-bold px-8 py-4 rounded-xl shadow-lg uppercase tracking-widest w-full sm:w-auto">🙋‍♂️ Usar (Bruno)</button>
-                </>
+                <button onClick={() => tomarCatastro(miNombre)} className="bg-[#1A1A1A] hover:bg-[#333] text-white text-lg md:text-xl font-bold px-8 py-4 rounded-xl shadow-lg uppercase tracking-widest w-full sm:w-auto">🙋‍♂️ Usar ({miNombre})</button>
               ) : ( <button onClick={liberarCatastro} className="bg-green-600 hover:bg-green-700 text-white text-xl md:text-2xl font-black px-12 py-5 rounded-xl shadow-lg w-full uppercase tracking-widest">🔓 LIBERAR SISTEMA</button> )}
             </div>
           </div>
