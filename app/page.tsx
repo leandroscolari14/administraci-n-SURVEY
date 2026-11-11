@@ -64,8 +64,8 @@ const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo"
 
 const ETAPAS_BASE = [
   { id: 'e_solicitado_ld', label: 'Solicitado LD' }, { id: 'e_medido', label: 'Medido' },
-  { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definido' }, { id: 'e_fac', label: 'FAC' },
-  { id: 'e_metido_saca_scit', label: 'Metido SACA+SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
+  { id: 'e_aportes_generados', label: 'Aportes' }, { id: 'e_definido', label: 'Definir' }, { id: 'e_fac', label: 'FAC' },
+  { id: 'e_saca', label: 'SACA' }, { id: 'e_scit', label: 'SCIT' }, { id: 'e_pedido_cc', label: 'Pedido CC' },
   { id: 'e_aprobado', label: 'Aprobado' }, { id: 'e_cc_emitido', label: 'CC Emitido' }
 ];
 
@@ -97,19 +97,29 @@ const obtenerEtapasParaTrabajo = (t: any) => {
   return etapas;
 };
 
-// FAC, Visado y Aportes tienen 3 fases: 0 sin tocar, 1 la columna de la etapa,
-// 2 la columna de la etapa + su columna final. Cada una con sus nombres de fase.
-const ETAPAS_TRES_FASES: Record<string, { final: string; fases: [string, string, string] }> = {
-  e_fac: { final: 'e_fac_aprobado', fases: ['sin iniciar', 'iniciado', 'aprobado'] },
-  e_visado: { final: 'e_visado_aprobado', fases: ['sin iniciar', 'iniciado', 'aprobado'] },
-  e_aportes_generados: { final: 'e_aportes_pagados', fases: ['sin generar', 'generados', 'pagados'] },
+// Etapas con varias fases. `columnas` es la cadena de columnas booleanas: la fase es la cantidad de
+// columnas encendidas desde el principio (0 = sin tocar). `fases` nombra cada fase (para el tooltip) y
+// `textos`, si está, cambia la palabra del botón según la fase. La última fase cuenta como completa.
+const ETAPAS_MULTIFASE: Record<string, { columnas: string[]; fases: string[]; textos?: string[] }> = {
+  e_fac: { columnas: ['e_fac', 'e_fac_aprobado'], fases: ['sin iniciar', 'iniciado', 'aprobado'] },
+  e_visado: { columnas: ['e_visado', 'e_visado_aprobado'], fases: ['sin iniciar', 'iniciado', 'aprobado'] },
+  e_aportes_generados: { columnas: ['e_aportes_generados', 'e_aportes_pagados'], fases: ['sin generar', 'generados', 'pagados'] },
+  e_definido: { columnas: ['e_definido', 'e_definido_dibujado'], fases: ['definir', 'dibujar', 'dibujado'], textos: ['Definir', 'Dibujar', 'Dibujado'] },
+  e_saca: { columnas: ['e_saca', 'e_saca_cerrado'], fases: ['sin ingresar', 'ingresado', 'cerrado'], textos: ['SACA', 'SACA ingresado', 'SACA cerrado'] },
+  e_scit: {
+    columnas: ['e_scit', 'e_scit_observado', 'e_scit_reingresado'],
+    fases: ['sin ingresar', 'ingresado', 'observado', 'reingresado'],
+    textos: ['SCIT', 'SCIT ingresado', 'SCIT observado', 'SCIT reingresado'],
+  },
 };
+const ultimaFaseEtapa = (id: string) => ETAPAS_MULTIFASE[id]?.columnas.length ?? 1;
 const faseEtapa = (t: any, id: string) => {
-  const config = ETAPAS_TRES_FASES[id];
-  if (!config) return t[id] ? 2 : 0;
-  return !t[id] ? 0 : t[config.final] ? 2 : 1;
+  const config = ETAPAS_MULTIFASE[id];
+  if (!config) return t[id] ? 1 : 0;
+  const apagada = config.columnas.findIndex(c => !t[c]);
+  return apagada === -1 ? config.columnas.length : apagada;
 };
-const etapaCompleta = (t: any, id: string) => faseEtapa(t, id) === 2;
+const etapaCompleta = (t: any, id: string) => faseEtapa(t, id) === ultimaFaseEtapa(id);
 
 const contarEtapasMarcadas = (t: any) => obtenerEtapasParaTrabajo(t).filter(e => etapaCompleta(t, e.id)).length;
 
@@ -633,9 +643,10 @@ export default function DashboardAgrimensura() {
     await supabase.from("trabajos_curso").update({ [etapa]: !valorActual }).eq("id", id);
   };
 
-  const ciclarEtapaTresFases = async (t: any, id: string) => {
-    const fase = (faseEtapa(t, id) + 1) % 3;
-    const cambios = { [id]: fase > 0, [ETAPAS_TRES_FASES[id].final]: fase === 2 };
+  const ciclarEtapaMultifase = async (t: any, id: string) => {
+    const columnas = ETAPAS_MULTIFASE[id].columnas;
+    const fase = (faseEtapa(t, id) + 1) % (columnas.length + 1);
+    const cambios = Object.fromEntries(columnas.map((c, i) => [c, i < fase]));
     setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, ...cambios } : x));
     await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
   };
@@ -961,18 +972,21 @@ export default function DashboardAgrimensura() {
     return (
       <div className="flex gap-1 flex-wrap items-center py-1">
         {etapas.map((e: any) => {
-          const tresFases = e.id in ETAPAS_TRES_FASES;
+          const config = ETAPAS_MULTIFASE[e.id];
           const fase = faseEtapa(t, e.id);
-          const colores = fase === 2
+          const observado = e.id === 'e_scit' && fase === 2;
+          const colores = fase === ultimaFaseEtapa(e.id)
             ? 'bg-[#727A4E] text-white border-[#727A4E]'
-            : fase === 1
-              ? 'bg-transparent text-[#A4B070] border-[#A4B070] ring-1 ring-inset ring-[#A4B070]'
-              : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500';
+            : observado
+              ? 'bg-transparent text-amber-400 border-amber-400 ring-1 ring-inset ring-amber-400'
+              : fase > 0
+                ? 'bg-transparent text-[#A4B070] border-[#A4B070] ring-1 ring-inset ring-[#A4B070]'
+                : 'bg-[#222222] text-zinc-500 border-zinc-700 hover:border-zinc-500';
           return (
-            <button key={e.id} onClick={() => tresFases ? ciclarEtapaTresFases(t, e.id) : toggleEtapa(t.id, e.id, t[e.id])}
-              title={tresFases ? `${e.label}: ${ETAPAS_TRES_FASES[e.id].fases[fase]}` : e.label}
+            <button key={e.id} onClick={() => config ? ciclarEtapaMultifase(t, e.id) : toggleEtapa(t.id, e.id, t[e.id])}
+              title={config ? `${e.label}: ${config.fases[fase]}` : e.label}
               className={`px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider rounded border transition-colors whitespace-nowrap ${colores}`}>
-              {e.label}
+              {config?.textos?.[fase] ?? e.label}
             </button>
           );
         })}
