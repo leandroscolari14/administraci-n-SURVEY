@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { ITEMS_CHECKLIST } from "@/app/lib/normativaPlanos";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -166,6 +167,15 @@ const EMAILS_PERMITIDOS = [
   "brunoverga13@gmail.com"
 ];
 
+const ETIQUETA_CATEGORIA_PLANO: Record<string, string> = {
+  concordancia: "Concordancia",
+  faltante: "Falta",
+  tipeo: "Tipeo",
+  presentacion: "Presentación",
+  titulo: "Contra la escritura / set",
+  verificar_titulo: "Verificar contra el título",
+};
+
 const NOMBRE_POR_EMAIL: Record<string, string> = {
   "leandroscolari14@gmail.com": "Leo",
   "brunoverga13@gmail.com": "Bruno"
@@ -212,6 +222,17 @@ export default function DashboardAgrimensura() {
   const [tiempoUso, setTiempoUso] = useState("");
   
   const [archivoComprobante, setArchivoComprobante] = useState<File | null>(null);
+
+  const [archivoPlano, setArchivoPlano] = useState<File | null>(null);
+  const [archivoEscritura, setArchivoEscritura] = useState<File | null>(null);
+  const [archivoSet, setArchivoSet] = useState<File | null>(null);
+  const [claveArchivosPlano, setClaveArchivosPlano] = useState(0);
+  const [expedientePlano, setExpedientePlano] = useState<string>("");
+  const [revisandoPlano, setRevisandoPlano] = useState(false);
+  const [errorPlano, setErrorPlano] = useState("");
+  const [resultadoPlanoActual, setResultadoPlanoActual] = useState<any | null>(null);
+  const [revisionesPlanos, setRevisionesPlanos] = useState<any[]>([]);
+  const [revisionesPlanosCargadas, setRevisionesPlanosCargadas] = useState(false);
 
   const tipoInputRef = useRef<HTMLInputElement>(null);
   const notasInputRef = useRef<HTMLInputElement>(null);
@@ -874,6 +895,63 @@ export default function DashboardAgrimensura() {
     alert("¡Semana liquidada y respaldada con éxito!");
   };
 
+  const cargarRevisionesPlanos = async () => {
+    const { data } = await supabase.from("revisiones_planos").select("*").order("creado_en", { ascending: false });
+    if (data) setRevisionesPlanos(data);
+    setRevisionesPlanosCargadas(true);
+  };
+
+  const revisarPlano = async () => {
+    if (!archivoPlano) { setErrorPlano("Seleccioná un archivo PDF primero."); return; }
+    setErrorPlano("");
+    setRevisandoPlano(true);
+    setResultadoPlanoActual(null);
+    try {
+      // Vercel limita el envío a 4,5 MB en total; se avisa antes de mandar.
+      const pesoTotal = [archivoPlano, archivoEscritura, archivoSet].reduce((suma, a) => suma + (a?.size || 0), 0);
+      if (pesoTotal > 4.2 * 1024 * 1024) throw new Error(`Los archivos pesan ${(pesoTotal / 1024 / 1024).toFixed(1)} MB y el máximo es 4 MB en total. Usá versiones más livianas o solo las hojas necesarias de la escritura.`);
+
+      const { data: dataSesion } = await supabase.auth.getSession();
+      const accessToken = dataSesion.session?.access_token;
+      if (!accessToken) throw new Error("La sesión venció. Volvé a iniciar sesión.");
+
+      const formData = new FormData();
+      formData.append("archivo", archivoPlano);
+      if (archivoEscritura) formData.append("escritura", archivoEscritura);
+      if (archivoSet) formData.append("set", archivoSet);
+      const respAnalisis = await fetch("/api/revisar-plano", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: formData });
+      const resultado = await respAnalisis.json().catch(() => ({ error: respAnalisis.status === 413 ? "Los archivos son demasiado pesados." : "No se pudo analizar el plano." }));
+      if (!respAnalisis.ok) throw new Error(resultado.error || "No se pudo analizar el plano.");
+
+      const nombreArchivo = `${Date.now()}_${archivoPlano.name}`;
+      const { error: uploadError } = await supabase.storage.from("planos").upload(nombreArchivo, archivoPlano);
+      if (uploadError) throw new Error(`Se analizó el plano pero no se pudo guardar el archivo: ${uploadError.message}`);
+      const { data: publicUrlData } = supabase.storage.from("planos").getPublicUrl(nombreArchivo);
+
+      const datosGuardar = {
+        expediente_id: expedientePlano || null,
+        nombre_archivo: archivoPlano.name,
+        archivo_url: publicUrlData.publicUrl,
+        revisor: session.user.email,
+        resultado,
+      };
+      const { error: insertError } = await supabase.from("revisiones_planos").insert([datosGuardar]);
+      if (insertError) throw new Error(`Se analizó el plano pero no se pudo guardar el historial: ${insertError.message}`);
+
+      setResultadoPlanoActual(resultado);
+      setArchivoPlano(null);
+      setArchivoEscritura(null);
+      setArchivoSet(null);
+      setClaveArchivosPlano(k => k + 1);
+      setExpedientePlano("");
+      await cargarRevisionesPlanos();
+    } catch (err: any) {
+      setErrorPlano(err.message || "Error al revisar el plano.");
+    } finally {
+      setRevisandoPlano(false);
+    }
+  };
+
   const reabrirSemana = async (fechaKey: string) => { if (finanzas.length > 0) return alert("Liquidá la actual primero."); if (confirm("¿Reabrir?")) { if (fechaKey === "anterior") await supabase.from("finanzas").update({ liquidado: false }).is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").update({ liquidado: false }).eq("fecha_liquidacion", fechaKey); await cargarDatos(); setSubTabFinanzas("actual"); } };
   const eliminarSemana = async (fechaKey: string) => { if (confirm("¿Borrar historial?")) { if (fechaKey === "anterior") await supabase.from("finanzas").delete().is("fecha_liquidacion", null).eq("liquidado", true); else await supabase.from("finanzas").delete().eq("fecha_liquidacion", fechaKey); cargarDatos(); } };
 
@@ -1180,6 +1258,10 @@ export default function DashboardAgrimensura() {
   };
 
   useEffect(() => {
+    if (activeTab === "planos" && !revisionesPlanosCargadas) cargarRevisionesPlanos();
+  }, [activeTab, revisionesPlanosCargadas]);
+
+  useEffect(() => {
     if (activeTab !== "dashboard") return;
 
     if (!document.getElementById("leaflet-css")) {
@@ -1444,6 +1526,7 @@ export default function DashboardAgrimensura() {
           <button onClick={() => setActiveTab("dashboard")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "dashboard" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📊 Dashboard</button>
           <button onClick={() => setActiveTab("finanzas")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "finanzas" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>Finanzas</button>
           <button onClick={() => setActiveTab("catastro")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 ${activeTab === "catastro" ? "bg-white text-[#1A1A1A] shadow-md" : "bg-[#222222] text-[#727A4E] hover:bg-[#333] border border-[#727A4E]/30"}`}>🔑 SCIT</button>
+          <button onClick={() => setActiveTab("planos")} className={`px-3 py-2 md:px-5 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs transition-all flex-grow sm:flex-grow-0 ${activeTab === "planos" ? "bg-[#727A4E] text-white shadow-md" : "bg-transparent text-zinc-500 hover:text-white border border-zinc-800 hover:border-[#727A4E]"}`}>📐 Planos</button>
           <button onClick={cerrarSesion} className="px-3 py-2 md:px-4 md:py-2.5 rounded-md font-bold tracking-wider uppercase text-[10px] md:text-xs bg-red-900/30 text-red-400 hover:bg-red-900/60 border border-red-800/50 transition-all" title="Cerrar Sesión">🚪 Salir</button>
         </div>
       </header>
@@ -2344,6 +2427,151 @@ export default function DashboardAgrimensura() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* PESTAÑA: REVISOR DE PLANOS */}
+      {activeTab === "planos" && (
+        <div className="space-y-6">
+          <div className="bg-[#1A1A1A] p-4 rounded-xl border border-zinc-800">
+            <h2 className="text-lg md:text-xl font-black tracking-widest text-white uppercase mb-4">📐 Revisor de Planos de Mensura</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+              <div>
+                <label className="text-xs uppercase tracking-wider text-zinc-500 font-bold block mb-1">Vincular a expediente (opcional)</label>
+                <select value={expedientePlano} onChange={e => setExpedientePlano(e.target.value)} className="w-full bg-[#111111] border border-zinc-800 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#727A4E]">
+                  <option value="">Sin vincular</option>
+                  {trabajosActivos.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider text-zinc-500 font-bold block mb-1">Plano (PDF)</label>
+                <input key={`plano-${claveArchivosPlano}`} type="file" accept="application/pdf" onChange={e => setArchivoPlano(e.target.files?.[0] || null)} className="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#727A4E] file:text-white hover:file:bg-[#8B9461] cursor-pointer w-full"/>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider text-zinc-500 font-bold block mb-1">Escritura (PDF, opcional)</label>
+                <input key={`escritura-${claveArchivosPlano}`} type="file" accept="application/pdf" onChange={e => setArchivoEscritura(e.target.files?.[0] || null)} className="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-700 file:text-white hover:file:bg-zinc-600 cursor-pointer w-full"/>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider text-zinc-500 font-bold block mb-1">Set de datos (PDF, opcional)</label>
+                <input key={`set-${claveArchivosPlano}`} type="file" accept="application/pdf" onChange={e => setArchivoSet(e.target.files?.[0] || null)} className="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-700 file:text-white hover:file:bg-zinc-600 cursor-pointer w-full"/>
+              </div>
+              <button onClick={revisarPlano} disabled={revisandoPlano || !archivoPlano} className="md:col-span-2 bg-[#727A4E] hover:bg-[#8B9461] disabled:opacity-50 text-white font-black py-3 px-6 rounded-lg shadow-lg text-sm uppercase tracking-widest">
+                {revisandoPlano ? "Analizando plano..." : "Revisar Plano"}
+              </button>
+            </div>
+            <p className="text-zinc-600 text-[11px] mt-3">Con la escritura y el set de datos (Informe Catastral) el revisor también contrasta nombres, superficies, linderos y nomenclatura contra el documento. Entre todos los archivos, hasta 4 MB.</p>
+            {revisandoPlano && <p className="text-zinc-500 text-xs mt-3">Puede tardar 2-4 minutos: Claude lee el plano y los documentos completos antes de responder.</p>}
+            {errorPlano && <p className="text-red-400 text-xs font-bold mt-3">{errorPlano}</p>}
+          </div>
+
+          {resultadoPlanoActual && (
+            <div className="bg-[#1A1A1A] p-6 rounded-xl border border-[#727A4E]/40 space-y-6">
+              <div>
+                <h3 className="text-white font-bold uppercase tracking-wider text-sm mb-2">Resultado</h3>
+                <p className="text-zinc-300 text-sm">{resultadoPlanoActual.resumen}</p>
+                {resultadoPlanoActual.documentos && (
+                  <p className="text-zinc-500 text-xs mt-2">
+                    Contrastado con: {[resultadoPlanoActual.documentos.escritura && "escritura", resultadoPlanoActual.documentos.set && "set de datos"].filter(Boolean).join(" y ") || "ningún documento (solo el plano)"}
+                  </p>
+                )}
+                {resultadoPlanoActual.incompleto && (
+                  <p className="text-yellow-400 text-xs font-bold mt-2">⚠️ El análisis se cortó por {resultadoPlanoActual.motivo_corte === "tiempo" ? "tiempo" : "largo"} antes de terminar: estos son los hallazgos que alcanzó a escribir. Volvé a correrlo si falta algo.</p>
+                )}
+              </div>
+
+              {(resultadoPlanoActual.checklist || []).length > 0 && (
+                <div>
+                  <h4 className="text-zinc-400 font-bold uppercase tracking-wider text-xs mb-2">Checklist ({ITEMS_CHECKLIST.length} puntos)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {resultadoPlanoActual.checklist.map((c: any, i: number) => {
+                      const meta = ITEMS_CHECKLIST.find((it) => it.id === c.id);
+                      const icono = c.estado === "ok" ? "✅" : c.estado === "advertencia" ? "⚠️" : c.estado === "error" ? "❌" : "➖";
+                      const color = c.estado === "ok" ? "text-emerald-400" : c.estado === "advertencia" ? "text-yellow-400" : c.estado === "error" ? "text-red-400" : "text-zinc-600";
+                      return (
+                        <div key={i} className="flex gap-2 items-start bg-[#111111] p-2.5 rounded border border-zinc-800">
+                          <span className="shrink-0">{icono}</span>
+                          <div className="min-w-0">
+                            <div className={`text-xs font-bold ${color}`}>{meta?.item || c.id}</div>
+                            {c.comentario && <div className="text-xs text-zinc-500 mt-0.5">{c.comentario}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-zinc-400 font-bold uppercase tracking-wider text-xs mb-2">{(resultadoPlanoActual.checklist || []).length > 0 ? "Hallazgos puntuales adicionales" : "Hallazgos"}</h4>
+                {(resultadoPlanoActual.hallazgos || []).length === 0 ? (
+                  <p className="text-emerald-400 text-sm font-bold">✅ Sin hallazgos.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {resultadoPlanoActual.hallazgos.map((h: any, i: number) => {
+                      const nivel = h.severidad || h.confianza;
+                      const color = nivel === "alta" ? "border-red-700/50 bg-red-900/20 text-red-300" : nivel === "media" ? "border-yellow-700/50 bg-yellow-900/20 text-yellow-300" : "border-zinc-700 bg-zinc-800/40 text-zinc-300";
+                      return (
+                        <div key={i} className={`p-3 rounded border ${color}`}>
+                          <div className="text-[10px] uppercase tracking-wider font-bold mb-1 opacity-80">{ETIQUETA_CATEGORIA_PLANO[h.categoria] || h.categoria} {h.confianza ? `· confianza ${h.confianza}` : ""} {h.articulo ? `· ${h.articulo}` : ""} {h.ubicacion ? `· ${h.ubicacion}` : ""}</div>
+                          <div className="text-sm">{h.descripcion}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-[#1A1A1A] rounded-xl border border-zinc-800 overflow-hidden">
+            <h3 className="text-white font-bold uppercase tracking-wider text-sm p-4 border-b border-zinc-800">Historial de revisiones</h3>
+            {revisionesPlanos.length === 0 ? (
+              <p className="text-zinc-500 text-sm p-4">Todavía no se revisó ningún plano.</p>
+            ) : (
+              <div className="divide-y divide-zinc-800">
+                {revisionesPlanos.map((r: any) => {
+                  const expediente = trabajosActivos.find((t: any) => t.id === r.expediente_id) || trabajosFinalizados.find((t: any) => t.id === r.expediente_id);
+                  const checklist = r.resultado?.checklist || [];
+                  const cantOk = checklist.filter((c: any) => c.estado === "ok").length;
+                  const cantError = checklist.filter((c: any) => c.estado === "error").length;
+                  const cantAdvertencia = checklist.filter((c: any) => c.estado === "advertencia").length;
+                  return (
+                    <details key={r.id} className="p-4">
+                      <summary className="cursor-pointer flex flex-wrap items-center gap-2 text-sm text-zinc-300">
+                        <span className="text-zinc-500 text-xs">{new Date(r.creado_en).toLocaleString("es-AR")}</span>
+                        <span className="font-bold text-white">{r.nombre_archivo}</span>
+                        {expediente && <span className="text-[#A4B070] text-xs">({expediente.tipo ? `${expediente.tipo} - ${expediente.propietario}` : expediente.nombre_expediente})</span>}
+                        {checklist.length > 0 && (
+                          <span className="text-xs whitespace-nowrap">✅ {cantOk} · ⚠️ {cantAdvertencia} · ❌ {cantError}</span>
+                        )}
+                        <a href={r.archivo_url} target="_blank" rel="noreferrer" className="text-blue-400 text-xs hover:underline ml-auto">Ver PDF</a>
+                      </summary>
+                      <p className="text-zinc-400 text-xs mt-2">{r.resultado?.resumen}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
+                        {checklist.map((c: any, i: number) => {
+                          const meta = ITEMS_CHECKLIST.find((it) => it.id === c.id);
+                          const icono = c.estado === "ok" ? "✅" : c.estado === "advertencia" ? "⚠️" : c.estado === "error" ? "❌" : "➖";
+                          return (
+                            <div key={i} className="text-xs text-zinc-400 flex gap-1.5">
+                              <span className="shrink-0">{icono}</span>
+                              <span>{meta?.item || c.id}{c.comentario ? ` — ${c.comentario}` : ""}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="space-y-2 mt-3">
+                        {(r.resultado?.hallazgos || []).map((h: any, i: number) => (
+                          <div key={i} className="text-xs text-zinc-400">• [{ETIQUETA_CATEGORIA_PLANO[h.categoria] || h.categoria}{h.confianza ? ` · ${h.confianza}` : ""}] {h.descripcion}</div>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Planos reales de clientes usados para calibrar el revisor: no se suben (repo público)
+/docs/normativa/ejemplo-*.pdf
+/.claude/
