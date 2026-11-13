@@ -69,9 +69,9 @@ const ETAPAS_BASE = [
   { id: 'e_aprobado', label: 'Aprobado' }
 ];
 
+// FAC tiene solo dos botones, cada uno con varias fases (ver ETAPAS_MULTIFASE): Medir / Medido / Dibujado y Meter / Iniciado / Aprobado.
 const ETAPAS_FAC = [
-  { id: 'e_medido', label: 'Medir' }, { id: 'e_dibujado', label: 'Dibujado' },
-  { id: 'e_iniciado', label: 'Iniciado' }, { id: 'e_aprobado', label: 'Aprobado' }
+  { id: 'fac_medicion', label: 'Medir' }, { id: 'fac_tramite', label: 'Meter' }
 ];
 
 // FAC tiene sus propias etapas. En el resto: "Solicitado LD" solo en VEP/REP;
@@ -100,11 +100,15 @@ const obtenerEtapasParaTrabajo = (t: any) => {
 // Etapas con varias fases. `columnas` es la cadena de columnas booleanas: la fase es la cantidad de
 // columnas encendidas desde el principio (0 = sin tocar). `fases` nombra cada fase (para el tooltip) y
 // `textos`, si está, cambia la palabra del botón según la fase. La última fase cuenta como completa.
-const ETAPAS_MULTIFASE: Record<string, { columnas: string[]; fases: string[]; textos?: string[] }> = {
+// Con `maximo`, la fase es la última columna encendida aunque falte alguna anterior (así un registro con marcas
+// salteadas muestra su avance real); al cambiar de fase igual se dejan las columnas ordenadas.
+const ETAPAS_MULTIFASE: Record<string, { columnas: string[]; fases: string[]; textos?: string[]; maximo?: boolean }> = {
   e_fac: { columnas: ['e_fac', 'e_fac_aprobado'], fases: ['sin iniciar', 'iniciado', 'aprobado'] },
   e_visado: { columnas: ['e_visado', 'e_visado_aprobado'], fases: ['sin iniciar', 'iniciado', 'aprobado'] },
   e_aportes_generados: { columnas: ['e_aportes_generados', 'e_aportes_pagados'], fases: ['sin generar', 'generados', 'pagados'] },
   e_medido: { columnas: ['e_medido'], fases: ['medir', 'medido'], textos: ['Medir', 'Medido'] },
+  fac_medicion: { columnas: ['e_medido', 'e_dibujado'], fases: ['medir', 'medido', 'dibujado'], textos: ['Medir', 'Medido', 'Dibujado'], maximo: true },
+  fac_tramite: { columnas: ['e_iniciado', 'e_aprobado'], fases: ['meter', 'iniciado', 'aprobado'], textos: ['Meter', 'Iniciado', 'Aprobado'], maximo: true },
   e_solicitado_ld: { columnas: ['e_solicitado_ld'], fases: ['solicitar', 'solicitado'], textos: ['Solicitar LD', 'Solicitado LD'] },
   e_pedido_cc: {
     columnas: ['e_pedido_cc', 'e_cc_emitido'],
@@ -123,6 +127,10 @@ const ultimaFaseEtapa = (id: string) => ETAPAS_MULTIFASE[id]?.columnas.length ??
 const faseEtapa = (t: any, id: string) => {
   const config = ETAPAS_MULTIFASE[id];
   if (!config) return t[id] ? 1 : 0;
+  if (config.maximo) {
+    for (let i = config.columnas.length - 1; i >= 0; i--) if (t[config.columnas[i]]) return i + 1;
+    return 0;
+  }
   const apagada = config.columnas.findIndex(c => !t[c]);
   return apagada === -1 ? config.columnas.length : apagada;
 };
