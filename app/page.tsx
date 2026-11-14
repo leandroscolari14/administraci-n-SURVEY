@@ -2235,8 +2235,8 @@ export default function DashboardAgrimensura() {
                             <td className="p-4 text-zinc-400">{f.es_gasto_5050 ? <span className="font-bold text-zinc-300">Pagó {f.encargado}</span> : f.propietario}</td>
                             <td className={`p-4 font-black ${f.es_gasto_5050 || f.tipo_pago === "gastos" ? 'text-red-400' : 'text-[#A4B070]'}`}>${formatearPlata(f.es_gasto_5050 ? f.caja : f.tipo_pago === "gastos" ? partes.totalAportes : f.ingreso_total)}</td>
                             <td className="p-4 text-zinc-500">{f.es_gasto_5050 ? '-' : `$${formatearPlata(partes.totalAportes)}`}</td>
-                            <td className={`p-4 font-bold ${partes.limpioLeo < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
-                            <td className={`p-4 font-bold ${partes.limpioBruno < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${f.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
+                            <td className={`p-4 font-bold ${f.es_gasto_5050 || partes.limpioLeo < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${formatearPlata(f.es_gasto_5050 ? -Math.round(Number(f.caja) / 2) : partes.limpioLeo)}</td>
+                            <td className={`p-4 font-bold ${f.es_gasto_5050 || partes.limpioBruno < 0 ? 'text-red-500' : 'text-zinc-200'}`}>${formatearPlata(f.es_gasto_5050 ? -Math.round(Number(f.caja) / 2) : partes.limpioBruno)}</td>
                             <td className="p-4 flex gap-3">
                               <button onClick={() => iniciarEdicionFinanza(f)} className="text-lg opacity-40 hover:opacity-100" title="Editar">✏️</button>
                               <button onClick={() => eliminarFinanza(f.id)} className="text-lg opacity-40 hover:opacity-100" title="Borrar">🗑️</button>
@@ -2400,8 +2400,8 @@ export default function DashboardAgrimensura() {
                                                             <td className="p-3 text-zinc-400">{h.es_gasto_5050 ? `Pagó ${h.encargado}` : h.propietario}</td>
                                                             <td className="p-3 text-zinc-500">{h.es_gasto_5050 ? '-' : h.encargado}</td>
                                                             <td className={`p-3 font-bold ${h.es_gasto_5050 || h.tipo_pago === "gastos" ? 'text-red-400' : 'text-zinc-300'}`}>${formatearPlata(h.es_gasto_5050 ? h.caja : h.tipo_pago === "gastos" ? partes.totalAportes : h.ingreso_total)}</td>
-                                                            <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioLeo)}</td>
-                                                            <td className="p-3 text-zinc-400">${h.es_gasto_5050 ? '$0' : formatearPlata(partes.limpioBruno)}</td>
+                                                            <td className="p-3 text-zinc-400">${formatearPlata(h.es_gasto_5050 ? -Math.round(Number(h.caja) / 2) : partes.limpioLeo)}</td>
+                                                            <td className="p-3 text-zinc-400">${formatearPlata(h.es_gasto_5050 ? -Math.round(Number(h.caja) / 2) : partes.limpioBruno)}</td>
                                                           </tr>
                                                         );
                                                       })}
