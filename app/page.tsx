@@ -977,7 +977,10 @@ export default function DashboardAgrimensura() {
         if (f.encargado === "Leo") cobradoLeo += Number(f.ingreso_total); else cobradoBruno += Number(f.ingreso_total);
       }
     });
-    return { cobradoLeo, limpioLeoTotal: gananciaPuraLeo, gastosLeo: gastosSalientesLeo, balanceLeo: (cobradoLeo - gastosSalientesLeo) - (gananciaPuraLeo - deuda5050Leo), cobradoBruno, limpioBrunoTotal: gananciaPuraBruno, gastosBruno: gastosSalientesBruno, balanceBruno: (cobradoBruno - gastosSalientesBruno) - (gananciaPuraBruno - deuda5050Bruno) };
+    // El limpio de cada uno descuenta todos los gastos: los del trámite (ya restados en cada expediente) y la mitad de los gastos 50/50.
+    const limpioLeoNeto = gananciaPuraLeo - deuda5050Leo;
+    const limpioBrunoNeto = gananciaPuraBruno - deuda5050Bruno;
+    return { cobradoLeo, limpioLeoTotal: Math.round(limpioLeoNeto), gastosLeo: gastosSalientesLeo, balanceLeo: (cobradoLeo - gastosSalientesLeo) - limpioLeoNeto, cobradoBruno, limpioBrunoTotal: Math.round(limpioBrunoNeto), gastosBruno: gastosSalientesBruno, balanceBruno: (cobradoBruno - gastosSalientesBruno) - limpioBrunoNeto };
   };
 
   const resumenActual = generarResumen(finanzas);
@@ -2196,7 +2199,7 @@ export default function DashboardAgrimensura() {
                   <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
                     <h4 className="text-[#727A4E] font-black tracking-widest text-sm mb-3">RESUMEN LEO</h4>
                     <p className="text-sm mb-1 text-zinc-400">Cobrado: <span className="text-white font-medium">${formatearPlata(resumenActual.cobradoLeo)}</span></p>
-                    <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioLeoTotal)}</span></p>
+                    <p className="text-sm mb-1 text-zinc-400">Limpio: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioLeoTotal)}</span></p>
                     <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosLeo)}</span></p>
                     <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceLeo > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
                       {resumenActual.balanceLeo > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceLeo)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceLeo))}`}
@@ -2205,7 +2208,7 @@ export default function DashboardAgrimensura() {
                   <div className="text-center sm:text-left bg-[#1A1A1A] sm:bg-transparent p-4 sm:p-0 rounded-lg">
                     <h4 className="text-[#727A4E] font-black tracking-widest text-sm mb-3">RESUMEN BRUNO</h4>
                     <p className="text-sm mb-1 text-zinc-400">Cobrado: <span className="text-white font-medium">${formatearPlata(resumenActual.cobradoBruno)}</span></p>
-                    <p className="text-sm mb-1 text-zinc-400">Limpio Exp.: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioBrunoTotal)}</span></p>
+                    <p className="text-sm mb-1 text-zinc-400">Limpio: <span className="text-white font-medium">${formatearPlata(resumenActual.limpioBrunoTotal)}</span></p>
                     <p className="text-sm border-b border-zinc-700 pb-2 mb-2 text-zinc-400">Pagado Gral: <span className="text-white font-medium">${formatearPlata(resumenActual.gastosBruno)}</span></p>
                     <p className={`font-black text-lg md:text-xl tracking-wide ${resumenActual.balanceBruno > 0 ? 'text-red-400' : 'text-[#A4B070]'}`}>
                       {resumenActual.balanceBruno > 0 ? `Pagar: $${formatearPlata(resumenActual.balanceBruno)}` : `A favor: $${formatearPlata(Math.abs(resumenActual.balanceBruno))}`}
