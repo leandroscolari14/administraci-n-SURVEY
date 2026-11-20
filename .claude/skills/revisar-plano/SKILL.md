@@ -51,6 +51,13 @@ folio o set de datos. Los linderos y las calles se respetan como están escritos
 nombre difiera de otros documentos si coincide con el antecedente, y en zona urbana una calle puede llevar su
 actualización (por ejemplo "CALLE MARMOL (HOY AV. 7 DE MARZO)"), que es correcta. Si no hay antecedente, decilo al final.
 
+### Si el plano es un REP u otra mensura (no VEP)
+
+No se compara con el plano antecedente (ni medidas ni linderos): eso es solo para VEP. Se contrasta con la escritura
+(medidas, superficie, linderos del título, dominio, propietario) y los linderos se comparan con el set de datos
+(nombre, P.I.I. y plano de cada lindero). Si hay varios lotes bajo una misma partida, cada lote es un plano: revisalos
+por separado y marcá a qué lote corresponde cada hallazgo.
+
 ## 4. Responder
 
 En español rioplatense, en este orden:
