@@ -75,4 +75,18 @@ En español rioplatense, en este orden:
    contra la escritura / set, verificar contra el título.
 4. Si algo no se pudo leer o falta un documento para comprobar un dato, decilo al final.
 
+## 5. PDF con las observaciones en rojo
+
+Después de responder, generá el PDF marcado como el del Colegio (solo si el plano tiene texto). Escribí un JSON en la
+carpeta temporal con un objeto por hallazgo, `{"n": 1, "buscar": ["texto tal cual está en el plano"], "nota": "..."}`
+(en `buscar` poné fragmentos cortos de una sola línea del plano, tal cual), y ejecutá:
+
+```
+python -I -X utf8 .claude/skills/revisar-plano/marcar.py <plano.pdf> <carpeta_temporal>/<nombre>_marcado.pdf <observaciones.json>
+```
+
+Encierra en rojo cada dato con el número del hallazgo y agrega una hoja con las observaciones. Si hay varios planos
+(varios lotes), un PDF por plano con sus propios hallazgos. Decile al usuario la ruta completa del PDF; no lo copies a
+la carpeta del cliente sin que lo pida. Si algún texto no se ubicó, avisalo.
+
 No modifiques ningún archivo del proyecto al revisar. No copies datos de clientes fuera de esta conversación.
