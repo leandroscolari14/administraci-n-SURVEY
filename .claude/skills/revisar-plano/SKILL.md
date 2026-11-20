@@ -39,6 +39,18 @@ El criterio de revisión está en `app/lib/normativaPlanos.ts`: leé `PROMPT_REV
 compares la partida (P.I.I.) con la nomenclatura. No marques formato, escalas, norte, firma, domicilio del profesional,
 ni notas de estado del trámite. Máximo 12 hallazgos, del más al menos importante.
 
+### Si el plano es un VEP (Verificación de Estado Parcelario)
+
+Un VEP mantiene las medidas, los ángulos y la superficie del plano antecedente. Si en la carpeta o en los argumentos
+está el plano antecedente (suele ser un escaneo: leelo mirando la imagen), extraelo también y comparalo con el VEP.
+Las diferencias que vienen del antecedente (suma de lados contra superficie, ángulos redondeados, anchos de calle)
+están dentro de tolerancia y NO se marcan. Sí se marca: que el cierre angular dé exacto, que el VEP no difiera del
+antecedente sin justificar, las cuentas del estado de ocupación (superficies ocupadas contra las cotas del
+alambrado), el tramado de lo ocupado, el rumbo de cada lindero (este/oeste, norte/sur), tipeo y concordancia con el
+folio o set de datos. Los linderos y las calles se respetan como están escritos en el antecedente: no marques que un
+nombre difiera de otros documentos si coincide con el antecedente, y en zona urbana una calle puede llevar su
+actualización (por ejemplo "CALLE MARMOL (HOY AV. 7 DE MARZO)"), que es correcta. Si no hay antecedente, decilo al final.
+
 ## 4. Responder
 
 En español rioplatense, en este orden:
@@ -49,4 +61,4 @@ En español rioplatense, en este orden:
    contra la escritura / set, verificar contra el título.
 4. Si algo no se pudo leer o falta un documento para comprobar un dato, decilo al final.
 
-No modifiques ningún archivo del proyecto. No copies datos de clientes fuera de esta conversación.
+No modifiques ningún archivo del proyecto al revisar. No copies datos de clientes fuera de esta conversación.

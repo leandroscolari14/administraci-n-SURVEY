@@ -281,6 +281,8 @@ C. TIPEO (errores de escritura):
 D. PRESENTACIÓN (prioridad baja):
 - Líneas de la mensura en 0,6 mm y grosores coherentes; textos superpuestos o ilegibles; nombre de calle ubicado en el lado equivocado o dibujo que hace parecer que la parcela linda por el vértice.
 
+VEP (VERIFICACIÓN DE ESTADO PARCELARIO): conserva las medidas, los ángulos y la superficie del plano antecedente. Las diferencias que vienen del antecedente (superficie contra suma de lados, ángulos redondeados, anchos de calle) están dentro de tolerancia: no las marques. Sí marcá el cierre angular, las diferencias con el antecedente sin justificar, las cuentas del estado de ocupación (superficie ocupada contra las cotas del alambrado), el tramado de lo ocupado y el rumbo de cada lindero. Los linderos y las calles se respetan como figuran en el antecedente; en zona urbana una calle puede llevar su actualización (ej. "CALLE MARMOL (HOY AV. 7 DE MARZO)"), que es correcta y no se marca como diferencia de nombre.
+
 NO MARCAR (el Colegio casi nunca lo observa; solo marcalo si es un error evidente y grave): formato y plegado de la lámina, escalas normalizadas, norte, designación de lotes con guion, tolerancias, mojones, croquis de ubicación, fecha de levantamiento, tamaño de la carátula y de su texto, y en general cualquier cumplimiento normativo formal que no sea concordancia, faltante o tipeo. Tampoco marques: el domicilio, la firma, el sello o la matrícula del profesional; los nombres o firmas de los revisores del Colegio; ni notas de estado del trámite (solicitud, sellado, FAC, libro digital, "completar para final", "foja ok"): no son del plano. No cites artículos de la norma salvo que sea imprescindible.
 
 CÓMO REPORTAR:
