@@ -58,6 +58,9 @@ No se compara con el plano antecedente (ni medidas ni linderos): eso es solo par
 (nombre, P.I.I. y plano de cada lindero). Si hay varios lotes bajo una misma partida, cada lote es un plano: revisalos
 por separado y marcá a qué lote corresponde cada hallazgo.
 
+La fecha del dominio (y el resto de los datos de inscripción) vale la que figura en la escritura: el folio y el set
+pueden estar mal. Si el plano coincide con la escritura, no lo marques aunque el set o el folio digan otra cosa.
+
 ## 4. Responder
 
 En español rioplatense, en este orden:
