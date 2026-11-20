@@ -58,6 +58,10 @@ No se compara con el plano antecedente (ni medidas ni linderos): eso es solo par
 (nombre, P.I.I. y plano de cada lindero). Si hay varios lotes bajo una misma partida, cada lote es un plano: revisalos
 por separado y marcá a qué lote corresponde cada hallazgo.
 
+El set de datos lista también a los linderos que tocan la parcela solo en un vértice; esos NO van en el plano. Que un
+lindero del set falte en el plano no es un error si solo toca un vértice (mirá el croquis del set); sí lo es si
+comparte un lado.
+
 La fecha del dominio (y el resto de los datos de inscripción) vale la que figura en la escritura: el folio y el set
 pueden estar mal. Si el plano coincide con la escritura, no lo marques aunque el set o el folio digan otra cosa.
 
