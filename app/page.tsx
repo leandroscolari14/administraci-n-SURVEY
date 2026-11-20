@@ -410,6 +410,15 @@ export default function DashboardAgrimensura() {
 
   // Quién está usando la app, según la sesión iniciada.
   const miNombre = NOMBRE_POR_EMAIL[session?.user?.email || ""] || session?.user?.email || "";
+  // Encargado por defecto al cargar expedientes o finanzas: quien tiene la sesión iniciada.
+  const miEncargado = miNombre === "Bruno" ? "Bruno" : "Leo";
+  useEffect(() => {
+    if (!session) return;
+    if (!editandoTrabajoId) setNuevoTrabajo(prev => (prev.encargado === miEncargado ? prev : { ...prev, encargado: miEncargado }));
+    if (!editandoFinanzaId) setNuevaFinanza(prev => (prev.encargado === miEncargado ? prev : { ...prev, encargado: miEncargado }));
+    // Solo cuando cambia quién tiene la sesión (no cada vez que se renueva), para no pisar un encargado elegido a mano.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [miEncargado]);
 
   const tomarCatastro = async (nombre: string) => {
     const nuevaFecha = new Date().toISOString();
@@ -654,7 +663,7 @@ export default function DashboardAgrimensura() {
       if (error) { alert(`Error al guardar: ${error.message}`); return; }
     }
     
-    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" });
+    setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: miEncargado, ubicacion: "", lat: "", lng: "" });
     setPartidaInput("");
     setErrorPartida("");
     cargarDatos();
@@ -848,7 +857,7 @@ export default function DashboardAgrimensura() {
       : await supabase.from("finanzas").insert([datosGuardar]);
     if (error) { alert(`No se pudo guardar el registro: ${error.message}`); return; }
     setEditandoFinanzaId(null);
-    setNuevaFinanza(estadoFinanzaInicial);
+    setNuevaFinanza({ ...estadoFinanzaInicial, encargado: miEncargado });
     cargarDatos();
     setTimeout(() => { tipoInputRef.current?.focus(); }, 100);
   };
@@ -1957,40 +1966,32 @@ export default function DashboardAgrimensura() {
                 </div>
 
                 <div className="flex justify-end gap-2 mt-2">
-                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: "Leo", ubicacion: "", lat: "", lng: "" }); setPartidaInput(""); setErrorPartida("");}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
+                  {editandoTrabajoId && <button type="button" onClick={() => {setEditandoTrabajoId(null); setNuevoTrabajo({ tipo: "", propietario: "", estado: "", color: "verde", encargado: miEncargado, ubicacion: "", lat: "", lng: "" }); setPartidaInput(""); setErrorPartida("");}} className="px-6 py-3 rounded-md font-bold tracking-widest text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase text-xs">Cancelar</button>}
                   <button type="submit" className={`px-8 py-3 rounded-md font-bold tracking-widest text-white uppercase text-xs transition-colors ${editandoTrabajoId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoTrabajoId ? "Guardar Cambios" : "Agregar Expediente"}</button>
                 </div>
               </form>
 
               <div className="space-y-6">
                 
-                {/* SECCIÓN EXPEDIENTES LEO */}
-                <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                  <div onClick={() => setLeoAbierto(!leoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{leoAbierto ? '▼' : '▶'}</span> Expedientes Leo</h3>
-                    <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosLeo.length} Activos</span>
-                  </div>
-                  
-                  {leoAbierto && (
-                    <div>
-                      {trabajosLeo.map((t: any) => renderTarjetaTrabajo(t))}
+                {/* SECCIONES DE EXPEDIENTES: arriba la de quien tiene la sesión iniciada */}
+                {(miEncargado === "Bruno" ? ["Bruno", "Leo"] : ["Leo", "Bruno"]).map(socio => {
+                  const abierto = socio === "Leo" ? leoAbierto : brunoAbierto;
+                  const alternar = () => (socio === "Leo" ? setLeoAbierto(!leoAbierto) : setBrunoAbierto(!brunoAbierto));
+                  const lista = socio === "Leo" ? trabajosLeo : trabajosBruno;
+                  return (
+                    <div key={socio} className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
+                      <div onClick={alternar} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
+                        <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{abierto ? '▼' : '▶'}</span> Expedientes {socio}</h3>
+                        <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{lista.length} Activos</span>
+                      </div>
+                      {abierto && (
+                        <div>
+                          {lista.map((t: any) => renderTarjetaTrabajo(t))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-
-                {/* SECCIÓN EXPEDIENTES BRUNO */}
-                <div className="bg-[#1A1A1A] rounded-xl shadow-lg overflow-hidden border border-zinc-800">
-                  <div onClick={() => setBrunoAbierto(!brunoAbierto)} className="bg-[#222222] p-4 border-b border-zinc-800 flex justify-between cursor-pointer hover:bg-[#2A2A2A] transition-colors select-none">
-                    <h3 className="font-bold text-white tracking-widest uppercase text-sm flex items-center gap-2"><span className="text-[#727A4E] text-xs">{brunoAbierto ? '▼' : '▶'}</span> Expedientes Bruno</h3>
-                    <span className="text-[#727A4E] font-bold text-sm bg-[#111] px-3 py-1 rounded-full border border-zinc-700">{trabajosBruno.length} Activos</span>
-                  </div>
-                  
-                  {brunoAbierto && (
-                    <div>
-                      {trabajosBruno.map((t: any) => renderTarjetaTrabajo(t))}
-                    </div>
-                  )}
-                </div>
+                  );
+                })}
 
               </div>
             </>
@@ -2188,7 +2189,7 @@ export default function DashboardAgrimensura() {
                     </>
                   )}
                   <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row justify-end gap-3 mt-4">
-                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza(estadoFinanzaInicial);}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
+                    {editandoFinanzaId && (<button type="button" onClick={() => {setEditandoFinanzaId(null); setNuevaFinanza({ ...estadoFinanzaInicial, encargado: miEncargado });}} className="w-full sm:w-auto px-6 py-3 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Cancelar</button>)}
                     <button type="submit" className={`w-full sm:w-auto px-8 py-3 rounded text-white text-xs font-black tracking-widest uppercase shadow-md transition-colors ${editandoFinanzaId ? 'bg-orange-600 hover:bg-orange-500' : 'bg-[#727A4E] hover:bg-[#8B9461]'}`}>{editandoFinanzaId ? "GUARDAR" : "CARGAR"}</button>
                   </div>
                 </form>
