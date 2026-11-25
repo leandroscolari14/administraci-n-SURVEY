@@ -831,8 +831,20 @@ export default function DashboardAgrimensura() {
     
     const invitados = "leandroscolari14@gmail.com,brunoverga13@gmail.com";
     const ubicacion = t.ubicacion || "Santa Fe, Argentina";
-    
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${f(fechaInicio)}/${f(fechaFin)}&location=${encodeURIComponent(ubicacion)}&details=${encodeURIComponent(`Medición coordinada para expediente de agrimensura.`)}&add=${invitados}`;
+
+    // Calendar no toma unas coordenadas como dirección, pero sí vuelve clickeable cualquier link de la descripción:
+    // se agregan los links a Google Maps (ver el punto y cómo llegar), que abren directo la app de mapas.
+    const tienePunto = Number.isFinite(parseFloat(t.lat)) && Number.isFinite(parseFloat(t.lng));
+    const destino = tienePunto ? `${t.lat},${t.lng}` : (t.ubicacion || "");
+    const linkMapa = tienePunto ? urlGoogleMaps(t.lat, t.lng) : (destino ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destino)}` : "");
+    const linkComoLlegar = destino ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}` : "";
+    const detalle = [
+      "Medición coordinada para expediente de agrimensura.",
+      linkMapa && `📍 Ver en Google Maps: ${linkMapa}`,
+      linkComoLlegar && `🚗 Cómo llegar: ${linkComoLlegar}`,
+    ].filter(Boolean).join("\n\n");
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${f(fechaInicio)}/${f(fechaFin)}&location=${encodeURIComponent(ubicacion)}&details=${encodeURIComponent(detalle)}&add=${invitados}`;
   };
 
   const guardarFinanza = async (e: any) => {
