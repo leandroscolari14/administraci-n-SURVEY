@@ -39,6 +39,15 @@ El criterio de revisión está en `app/lib/normativaPlanos.ts`: leé `PROMPT_REV
 compares la partida (P.I.I.) con la nomenclatura. No marques formato, escalas, norte, firma, domicilio del profesional,
 ni notas de estado del trámite. Máximo 12 hallazgos, del más al menos importante.
 
+### Faltantes que el Colegio observa seguido
+
+Revisá siempre, en cualquier plano: (1) ancho de cada calle acotado entre líneas municipales en el dibujo, incluso las
+que se ven solo en el arranque o en una esquina; (2) espesor de muros acotado cuando el límite o las mejoras son muros;
+(3) nombre del propietario completo tal cual figura en el título (ej. "ALCIDES OSCAR DEL POZO", no "ALCIDES DEL POZO");
+(4) una línea de "superficie s/título" por cada fracción del título, identificada (punto A, punto B); (5) linderos
+indicados en el croquis de integración de títulos; (6) respaldo de lo que se afirma en observaciones (declaratoria de
+herederos, escritura adjunta o con su dato de inscripción).
+
 ### Si el plano es un VEP (Verificación de Estado Parcelario)
 
 Un VEP mantiene las medidas, los ángulos y la superficie del plano antecedente. Si en la carpeta o en los argumentos
