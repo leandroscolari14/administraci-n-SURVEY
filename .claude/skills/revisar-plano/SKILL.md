@@ -48,6 +48,10 @@ que se ven solo en el arranque o en una esquina (esto NO en los VEP); (2) espeso
 indicados en el croquis de integración de títulos; (6) respaldo de lo que se afirma en observaciones (declaratoria de
 herederos, escritura adjunta o con su dato de inscripción).
 
+**Nombres de calle:** vale la grafía del SCIT (cartografía, folio o set de datos). No marques como tipeo un nombre que
+puede venir de ahí aunque la persona homenajeada se escriba distinto (ej. "ZASPE" en Santa Fe es correcto); si no lo
+podés comprobar, preguntalo en vez de darlo por error.
+
 **Norte:** todo plano, también un VEP, tiene que tener el norte indicado en el dibujo. Miralo en la imagen (no sale en
 el texto); si no está, es un faltante.
 
