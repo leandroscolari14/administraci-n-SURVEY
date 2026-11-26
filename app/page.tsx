@@ -210,6 +210,8 @@ export default function DashboardAgrimensura() {
   const [ordenTrabajos, setOrdenTrabajos] = useState<string[]>([]);
   const [notaEditando, setNotaEditando] = useState<{ id: string; valor: string } | null>(null);
   const notaEditandoRef = useRef<{ id: string; valor: string } | null>(null);
+  // Ventana que pide el N° de expediente (se abre al marcar los aportes como generados).
+  const [pidiendoNroExpediente, setPidiendoNroExpediente] = useState<{ id: string; nombre: string; valor: string } | null>(null);
   const editarNota = (nota: { id: string; valor: string } | null) => {
     notaEditandoRef.current = nota;
     setNotaEditando(nota);
@@ -714,7 +716,27 @@ export default function DashboardAgrimensura() {
     const fase = (faseEtapa(t, id) + 1) % (columnas.length + 1);
     const cambios = Object.fromEntries(columnas.map((c, i) => [c, i < fase]));
     setTrabajosActivos(prev => prev.map(x => x.id === t.id ? { ...x, ...cambios } : x));
+    // Aportes generados = se generó el expediente: si todavía no tiene número, se pide.
+    if (id === 'e_aportes_generados' && fase === 1 && !t.nro_expediente) pedirNroExpediente(t);
     await supabase.from("trabajos_curso").update(cambios).eq("id", t.id);
+  };
+
+  const pedirNroExpediente = (t: any) => setPidiendoNroExpediente({ id: t.id, nombre: t.tipo ? `${t.tipo} - ${t.propietario}` : t.nombre_expediente, valor: t.nro_expediente || "" });
+
+  const guardarNroExpediente = async (e: any) => {
+    e.preventDefault();
+    if (!pidiendoNroExpediente) return;
+    const { id, valor } = pidiendoNroExpediente;
+    const nuevo = valor.trim() || null;
+    const anterior = trabajosActivos.find((t: any) => t.id === id)?.nro_expediente || null;
+    setPidiendoNroExpediente(null);
+    if (nuevo === anterior) return;
+    setTrabajosActivos(prev => prev.map(x => x.id === id ? { ...x, nro_expediente: nuevo } : x));
+    const { error } = await supabase.from("trabajos_curso").update({ nro_expediente: nuevo }).eq("id", id);
+    if (error) {
+      setTrabajosActivos(prev => prev.map(x => x.id === id ? { ...x, nro_expediente: anterior } : x));
+      alert(`No se pudo guardar el N° de expediente: ${error.message}`);
+    }
   };
 
   const toggleEstadoIngresado = async (t: any) => {
@@ -1168,6 +1190,12 @@ export default function DashboardAgrimensura() {
               </button>
             )}
             {t.ubicacion && <div className="text-[10px] text-zinc-500 mt-0.5 truncate max-w-[240px]">📍 {t.ubicacion}</div>}
+            {(t.nro_expediente || t.e_aportes_generados) && (
+              <button type="button" onClick={() => pedirNroExpediente(t)} title="Tocá para editar el N° de expediente"
+                className={`block text-left text-[10px] mt-0.5 hover:text-zinc-300 ${t.nro_expediente ? 'text-zinc-500' : 'italic text-zinc-600'}`}>
+                {t.nro_expediente ? `📄 Expte. ${t.nro_expediente}` : '+ N° de expediente'}
+              </button>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -1765,6 +1793,24 @@ export default function DashboardAgrimensura() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* VENTANA: N° DE EXPEDIENTE */}
+      {pidiendoNroExpediente && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <form onSubmit={guardarNroExpediente} className="bg-[#1A1A1A] border border-zinc-700 p-6 rounded-xl max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 className="font-black text-white text-base tracking-widest uppercase border-b border-zinc-800 pb-2">N° de expediente</h3>
+            <p className="text-xs text-zinc-400">{pidiendoNroExpediente.nombre}</p>
+            <input autoFocus type="text" value={pidiendoNroExpediente.valor} placeholder="Número de expediente"
+              onChange={e => setPidiendoNroExpediente({ ...pidiendoNroExpediente, valor: e.target.value })}
+              onKeyDown={e => { if (e.key === 'Escape') setPidiendoNroExpediente(null); }}
+              className="w-full bg-[#222] border border-zinc-700 text-white p-3 rounded text-sm font-bold focus:outline-none focus:border-[#727A4E]" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setPidiendoNroExpediente(null)} className="px-4 py-2 rounded text-xs tracking-widest font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 uppercase">Después</button>
+              <button type="submit" className="px-5 py-2 rounded text-xs tracking-widest font-black text-white bg-[#727A4E] hover:bg-[#8B9461] uppercase">Guardar</button>
+            </div>
+          </form>
         </div>
       )}
 
