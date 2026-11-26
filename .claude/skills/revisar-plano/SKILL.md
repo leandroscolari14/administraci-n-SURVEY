@@ -31,6 +31,30 @@ escaneada no tiene texto: se lee mirando sus imágenes.
 - De la **escritura** y del **set de datos**: leelos completos (las imágenes de cada página si es un escaneo).
 - Transcribí los datos tal cual aparecen antes de compararlos. No des por buena una cuenta sin hacerla.
 
+### Calles y norte contra IDESF
+
+Si hay folio o set de datos (o te pasan la nomenclatura), ubicá la parcela y mirá cómo van las calles:
+
+```
+python -I -X utf8 .claude/skills/revisar-plano/ubicar.py <carpeta_temporal> <folio.pdf | "10 11 03 0018 00065">
+```
+
+Al servidor de la provincia solo se le envía la nomenclatura (después, las coordenadas que él mismo devuelve). Genera
+`croquis.png` (parcelas y calles con el norte hacia arriba, la parcela en rojo) y `calles.png` (zona más amplia, con
+todos los nombres), y muestra el azimut de cada lado de la parcela. Miralos y compará:
+
+- **Calles:** nombre de cada una, de qué lado de la parcela queda y la numeración contra la ubicación del plano. Una
+  calle que falta, cambiada de lado o con otro nombre es un hallazgo. Las capas pueden abreviar o escribir distinto
+  ("MONS ZASPE" / "VICENTE ZASPE"): eso no es tipeo. En un VEP vale el nombre del antecedente, con o sin "(HOY …)".
+- **Norte:** tomá un lado largo del plano (identificalo por su medida) y medí su ángulo respecto del norte dibujado,
+  con el mismo criterio del azimut (desde el norte hacia el este, 0 a 180°). Para medirlo usá las líneas del PDF
+  (`page.get_drawings()` de pymupdf) o la imagen. Los azimuts son aproximados: marcá el norte solo si la diferencia
+  pasa los 10°, y decí los dos valores.
+
+El mapa no da anchos de calle. En parcelas rurales o muy grandes puede no dibujar la parcela (el rectángulo rojo es
+solo su envolvente) y no hay azimuts. Si IDESF no responde, seguí la revisión y avisalo al final. Decile al usuario la
+ruta de `croquis.png`.
+
 ## 3. Aplicar el criterio
 
 El criterio de revisión está en `app/lib/normativaPlanos.ts`: leé `PROMPT_REVISION_V2` (qué buscar y qué no marcar) y
@@ -107,4 +131,5 @@ Encierra en rojo cada dato con el número del hallazgo y agrega una hoja con las
 (varios lotes), un PDF por plano con sus propios hallazgos. Decile al usuario la ruta completa del PDF; no lo copies a
 la carpeta del cliente sin que lo pida. Si algún texto no se ubicó, avisalo.
 
-No modifiques ningún archivo del proyecto al revisar. No copies datos de clientes fuera de esta conversación.
+No modifiques ningún archivo del proyecto al revisar. No copies datos de clientes fuera de esta conversación (la única
+consulta externa es la de `ubicar.py` a la provincia, con la nomenclatura).
