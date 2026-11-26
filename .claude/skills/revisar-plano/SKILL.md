@@ -36,7 +36,7 @@ escaneada no tiene texto: se lee mirando sus imágenes.
 El criterio de revisión está en `app/lib/normativaPlanos.ts`: leé `PROMPT_REVISION_V2` (qué buscar y qué no marcar) y
 `instruccionesDocumentos` (cómo contrastar la escritura y el set). Aplicalos al pie de la letra. En resumen: concordancia
 (el mismo dato igual en todos lados, con las cuentas hechas), faltantes, tipeo, y presentación como prioridad baja. No
-compares la partida (P.I.I.) con la nomenclatura. No marques formato, escalas, norte, firma, domicilio del profesional,
+compares la partida (P.I.I.) con la nomenclatura. No marques formato, escalas, firma, domicilio del profesional,
 ni notas de estado del trámite. Máximo 12 hallazgos, del más al menos importante.
 
 ### Faltantes que el Colegio observa seguido
@@ -47,6 +47,9 @@ que se ven solo en el arranque o en una esquina (esto NO en los VEP); (2) espeso
 (4) una línea de "superficie s/título" por cada fracción del título, identificada (punto A, punto B); (5) linderos
 indicados en el croquis de integración de títulos; (6) respaldo de lo que se afirma en observaciones (declaratoria de
 herederos, escritura adjunta o con su dato de inscripción).
+
+**Norte:** todo plano, también un VEP, tiene que tener el norte indicado en el dibujo. Miralo en la imagen (no sale en
+el texto); si no está, es un faltante.
 
 ### Si el plano es un VEP (Verificación de Estado Parcelario)
 
