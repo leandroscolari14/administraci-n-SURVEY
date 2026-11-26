@@ -41,8 +41,8 @@ ni notas de estado del trámite. Máximo 12 hallazgos, del más al menos importa
 
 ### Faltantes que el Colegio observa seguido
 
-Revisá siempre, en cualquier plano: (1) ancho de cada calle acotado entre líneas municipales en el dibujo, incluso las
-que se ven solo en el arranque o en una esquina; (2) espesor de muros acotado cuando el límite o las mejoras son muros;
+Revisá siempre: (1) ancho de cada calle acotado entre líneas municipales en el dibujo, incluso las
+que se ven solo en el arranque o en una esquina (esto NO en los VEP); (2) espesor de muros acotado cuando el límite o las mejoras son muros;
 (3) nombre del propietario completo tal cual figura en el título (ej. "ALCIDES OSCAR DEL POZO", no "ALCIDES DEL POZO");
 (4) una línea de "superficie s/título" por cada fracción del título, identificada (punto A, punto B); (5) linderos
 indicados en el croquis de integración de títulos; (6) respaldo de lo que se afirma en observaciones (declaratoria de
@@ -56,7 +56,7 @@ Las diferencias que vienen del antecedente (suma de lados contra superficie, án
 están dentro de tolerancia y NO se marcan. Sí se marca: que el cierre angular dé exacto, que el VEP no difiera del
 antecedente sin justificar, las cuentas del estado de ocupación (superficies ocupadas contra las cotas del
 alambrado), el tramado de lo ocupado, el rumbo de cada lindero (este/oeste, norte/sur), tipeo y concordancia con el
-folio o set de datos. Los linderos y las calles se respetan como están escritos en el antecedente: no marques que un
+folio o set de datos. En un VEP no se pide acotar el ancho de las calles: no lo marques como faltante. Los linderos y las calles se respetan como están escritos en el antecedente: no marques que un
 nombre difiera de otros documentos si coincide con el antecedente, y en zona urbana una calle puede llevar su
 actualización (por ejemplo "CALLE MARMOL (HOY AV. 7 DE MARZO)"), que es correcta. Si no hay antecedente, decilo al final.
 
