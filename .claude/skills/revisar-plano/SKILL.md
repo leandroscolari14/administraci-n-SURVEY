@@ -31,9 +31,13 @@ escaneada no tiene texto: se lee mirando sus imágenes.
 - De la **escritura** y del **set de datos**: leelos completos (las imágenes de cada página si es un escaneo).
 - Transcribí los datos tal cual aparecen antes de compararlos. No des por buena una cuenta sin hacerla.
 
-### Calles y norte contra IDESF
+### Calles y norte
 
-Si hay folio o set de datos (o te pasan la nomenclatura), ubicá la parcela y mirá cómo van las calles:
+En un REP u otra mensura está el set de datos, que ya trae esa información: compará las calles (nombre y de qué lado
+quedan) y el norte con sus croquis (miralos en las imágenes) y **no consultes IDESF**.
+
+En un VEP no se descarga el set de datos: ahí ubicá la parcela en IDESF con la nomenclatura del folio (hacé lo mismo en
+otro plano solo si falta el set o el usuario lo pide):
 
 ```
 python -I -X utf8 .claude/skills/revisar-plano/ubicar.py <carpeta_temporal> <folio.pdf | "10 11 03 0018 00065">
