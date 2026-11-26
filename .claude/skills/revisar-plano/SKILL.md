@@ -59,7 +59,9 @@ Las diferencias que vienen del antecedente (suma de lados contra superficie, án
 están dentro de tolerancia y NO se marcan. Sí se marca: que el cierre angular dé exacto, que el VEP no difiera del
 antecedente sin justificar, las cuentas del estado de ocupación (superficies ocupadas contra las cotas del
 alambrado), el tramado de lo ocupado, el rumbo de cada lindero (este/oeste, norte/sur), tipeo y concordancia con el
-folio o set de datos. En un VEP no se pide acotar el ancho de las calles: no lo marques como faltante. Los linderos y las calles se respetan como están escritos en el antecedente: no marques que un
+folio o set de datos. Cada invasión tiene que estar señalada en el dibujo con una flecha y su leyenda,
+"SUP. OCUPADA A LINDERO ESTE" (la parcela ocupa al lindero) o "SUP. OCUPADA POR LINDERO ESTE" (el lindero ocupa la
+parcela), con el rumbo que corresponda y coherente con el cuadro de ocupación; si falta, es un faltante. En un VEP no se pide acotar el ancho de las calles: no lo marques como faltante. Los linderos y las calles se respetan como están escritos en el antecedente: no marques que un
 nombre difiera de otros documentos si coincide con el antecedente, y en zona urbana una calle puede llevar su
 actualización (por ejemplo "CALLE MARMOL (HOY AV. 7 DE MARZO)"), que es correcta. Si no hay antecedente, decilo al final.
 
