@@ -83,6 +83,17 @@ podés comprobar, preguntalo en vez de darlo por error.
 **Norte:** todo plano, también un VEP, tiene que tener el norte indicado en el dibujo. Miralo en la imagen (no sale en
 el texto); si no está, es un faltante.
 
+**Cotas de muros:** revisalas una por una, en cada vértice, quiebre y tramo de lindero, ampliando la imagen (en los
+recortes chicos no se distinguen). Las cotas parciales a cada lado de la línea tienen que sumar el espesor del muro
+(ej. 0,07 + 0,08 = 0,15; 0,09 + 0,21 = 0,30). Hacé la cuenta en cada grupo: una parcial que no suma, o mayor que el
+muro (un 0,80 en un muro de 0,15), es un hallazgo. El Colegio ya observó una así ("verificar medida acotada").
+
+**Datos judiciales en observaciones:** si el plano cita un sucesorio u otro expediente judicial (carátula, CUIJ,
+juzgado, nominación, herederos), buscá la declaratoria en la carpeta o en los argumentos (suele ser un escaneo:
+extraela y leela mirando la imagen) y compará el CUIJ dígito por dígito, y el resto textual. Un dígito distinto es un
+hallazgo (el Colegio observó "verificar numero de CUIJ"). Si el documento no está, no lo des por error: avisá al
+final que no se pudo comprobar.
+
 ### Si el plano es un VEP (Verificación de Estado Parcelario)
 
 Un VEP mantiene las medidas, los ángulos y la superficie del plano antecedente. Si en la carpeta o en los argumentos
