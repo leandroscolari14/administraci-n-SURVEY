@@ -1,16 +1,19 @@
 """Ubica una parcela en IDESF y dibuja las calles de alrededor, con el norte hacia arriba.
 
 Uso:
-    python -I -X utf8 ubicar.py <carpeta_salida> <folio.pdf | folio.txt | nomenclatura>
+    python -I -X utf8 ubicar.py <carpeta_salida> <folio.pdf | folio.txt | nomenclatura | partida>
 
 La nomenclatura es distrito(4) + sección(2) + manzana(4) + parcela(5), 15 dígitos
-(ej. "10 11 03 0018 00065"). Es lo único que se envía al servidor de la provincia.
+(ej. "10 11 03 0018 00065"). La partida (P.I.I.) son 16 dígitos
+(ej. "00-00-00 000000/0000"): con ella se consulta primero el SCIT, que da la parcela,
+la ubicación y el plano. Al servidor de la provincia solo se le envía ese dato.
 
 Genera:
     croquis.png  parcelas (la buscada en rojo) con nombres y numeración de calles
     calles.png   la misma zona más amplia, solo manzanas y nombres de calles
 y muestra la ubicación y el azimut de cada lado de la parcela, para controlar el norte.
 """
+import html
 import http.cookiejar
 import io
 import json
@@ -25,6 +28,7 @@ import urllib.request
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 from pyproj import Transformer
 
+SCIT = "https://www.santafe.gob.ar/tramites-scit/t-cons/consultarPartida"
 PAGINA = "https://www.santafe.gob.ar/idesf/buscadorparcela/web/index.php?MAPA_INCORPORADO=true&TRAMITE=true"
 BUSCADOR = "https://www.santafe.gob.ar/idesf/buscadorparcela/web/proxyPTRxml.php"
 WMS = "https://aswe.santafe.gov.ar/idesf/publico-wms"
@@ -51,9 +55,58 @@ def leer_nomenclatura(arg):
             sys.exit("No encontré la nomenclatura en el archivo: pasala a mano (15 dígitos).")
         return "".join(m.groups())
     nom = re.sub(r"[\s\-./]", "", arg).upper()
+    if len(nom) == 16 and nom.isdigit():
+        return consultar_partida(nom)
     if len(nom) != 15:
-        sys.exit("La nomenclatura tiene que tener 15 caracteres: distrito(4) sección(2) manzana(4) parcela(5).")
+        sys.exit("Pasá la nomenclatura (15 caracteres: distrito(4) sección(2) manzana(4) parcela(5)) "
+                 "o la partida completa (16 dígitos).")
     return nom
+
+
+def sesion():
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())).open
+
+
+def consultar_partida(partida):
+    """Consulta la partida (16 dígitos) en el SCIT, muestra sus datos y devuelve la nomenclatura."""
+    abrir = sesion()
+    pagina = pedir(abrir, urllib.request.Request(SCIT, headers=AGENTE)).decode("utf-8", "replace")
+    token = (re.search(r'form_consulta\[_token\][^>]*value="([^"]*)"', pagina)
+             or re.search(r'value="([^"]*)"[^>]*name="form_consulta\[_token\]"', pagina))
+    if not token:
+        sys.exit("El SCIT no devolvió el formulario de consulta. Probá más tarde o pasá la nomenclatura.")
+    p = partida
+    cuerpo = urllib.parse.urlencode({
+        "form_consulta[partida]": f"{p[:2]}-{p[2:4]}-{p[4:6]} {p[6:12]}/{p[12:]}",
+        "form_consulta[Consultar]": "",
+        "form_consulta[_token]": token.group(1),
+    }).encode()
+    res = pedir(abrir, urllib.request.Request(SCIT, data=cuerpo, headers=AGENTE)).decode("utf-8", "replace")
+    if "La partida no existe" in res:
+        sys.exit("La partida no existe en el SCIT.")
+
+    parcelas = []
+    for tabla in re.findall(r"<table.*?</table>", res, re.S):
+        titulo = " ".join(re.sub(r"<[^>]+>", " ", tabla).split()).upper()
+        for fila in re.findall(r"<tr.*?</tr>", tabla, re.S):
+            c = [" ".join(html.unescape(re.sub(r"<[^>]+>", " ", v)).split())
+                 for v in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", fila, re.S)]
+            if not c:
+                continue
+            if "DATOS GENERALES DE LA PARTIDA" in titulo and len(c) >= 6 and re.match(r"\d{2}-\d{2}-\d{2}", c[0]):
+                print(f"SCIT, partida {c[0]} ({c[1]}): {c[2] or 'sin ubicación'} - zona {c[3]} - terreno {c[4]}, edificado {c[5]}")
+            nom = re.sub(r"[^A-Za-z0-9]", "", c[0]).upper()
+            if "DATOS DE PARCELAS POR PARTIDA" in titulo and len(nom) >= 15 and nom[:6].isdigit():
+                parcelas.append(nom[:15])
+                # columnas: parcela, regional, número y año del plano, manzana, lote
+                detalle = (f"plano N° {c[2]} / {c[3]} (regional {c[1]}), manzana {c[4]}, lote {c[5]}"
+                           if len(c) == 6 else " | ".join(c[1:]))
+                print(f"SCIT, parcela {nom[:15]}: {detalle}")
+    if not parcelas:
+        sys.exit("El SCIT no devolvió la parcela de esa partida: pasá la nomenclatura.")
+    if len(set(parcelas)) > 1:
+        print(f"La partida tiene varias parcelas: ubico la {parcelas[0]} (las otras se pasan por nomenclatura).")
+    return parcelas[0]
 
 
 def pedir(abrir, pedido, intentos=3):
@@ -62,12 +115,12 @@ def pedir(abrir, pedido, intentos=3):
             return abrir(pedido, timeout=90).read()
         except OSError as e:   # incluye timeouts y errores 5xx
             if i == intentos:
-                sys.exit(f"IDESF no respondió ({e}). Probá de nuevo más tarde.")
+                sys.exit(f"El servidor de la provincia no respondió ({e}). Probá de nuevo más tarde.")
             time.sleep(5 * i)
 
 
 def buscar_parcela(nom):
-    abrir = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())).open
+    abrir = sesion()
     cab = {**AGENTE, "X-Requested-With": "XMLHttpRequest", "Referer": PAGINA, "Origin": "https://www.santafe.gob.ar"}
     pedir(abrir, urllib.request.Request(PAGINA, headers=cab))
     res = {}

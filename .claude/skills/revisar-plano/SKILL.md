@@ -1,6 +1,6 @@
 ---
 name: revisar-plano
-description: Revisa un plano de mensura en PDF buscando errores de concordancia, elementos faltantes y errores de tipeo, y lo contrasta con la escritura y el set de datos (Informe Catastral) si se pasan. Usar cuando el usuario pida revisar un plano de mensura o pase la ruta de un plano.
+description: Revisa un plano de mensura en PDF buscando errores de concordancia, elementos faltantes y errores de tipeo, y lo contrasta con la escritura y el set de datos (Informe Catastral) si se pasan. Usar cuando el usuario pida revisar un plano de mensura o pase la ruta de un plano, o pida las calles o la ubicación de una partida o parcela.
 argument-hint: <plano.pdf> [escritura.pdf] [set-de-datos.pdf]
 ---
 
@@ -36,14 +36,19 @@ escaneada no tiene texto: se lee mirando sus imágenes.
 En un REP u otra mensura está el set de datos, que ya trae esa información: compará las calles (nombre y de qué lado
 quedan) y el norte con sus croquis (miralos en las imágenes) y **no consultes IDESF**.
 
-En un VEP no se descarga el set de datos: ahí ubicá la parcela en IDESF con la nomenclatura del folio (hacé lo mismo en
-otro plano solo si falta el set o el usuario lo pide):
+En un VEP no se descarga el set de datos: ahí ubicá la parcela en IDESF con la nomenclatura del folio o con la partida
+(hacé lo mismo en otro plano solo si falta el set o el usuario lo pide):
 
 ```
-python -I -X utf8 .claude/skills/revisar-plano/ubicar.py <carpeta_temporal> <folio.pdf | "10 11 03 0018 00065">
+python -I -X utf8 .claude/skills/revisar-plano/ubicar.py <carpeta_temporal> <folio.pdf | "10 11 03 0018 00065" | partida de 16 dígitos>
 ```
 
-Al servidor de la provincia solo se le envía la nomenclatura (después, las coordenadas que él mismo devuelve). Genera
+Con la partida consulta primero el SCIT y muestra la ubicación, la superficie y la parcela con su plano antecedente
+(número, año, manzana y lote). Si el usuario solo pide las calles o la ubicación de una partida, corré esto y
+respondé con las calles de cada lado (miralas en las imágenes), sin hacer el resto de la revisión.
+
+Al servidor de la provincia solo se le envía la nomenclatura o la partida (después, las coordenadas que él mismo
+devuelve). Genera
 `croquis.png` (parcelas y calles con el norte hacia arriba, la parcela en rojo) y `calles.png` (zona más amplia, con
 todos los nombres), y muestra el azimut de cada lado de la parcela. Miralos y compará:
 
@@ -54,6 +59,9 @@ todos los nombres), y muestra el azimut de cada lado de la parcela. Miralos y co
   con el mismo criterio del azimut (desde el norte hacia el este, 0 a 180°). Para medirlo usá las líneas del PDF
   (`page.get_drawings()` de pymupdf) o la imagen. Los azimuts son aproximados: marcá el norte solo si la diferencia
   pasa los 10°, y decí los dos valores.
+
+Si una calle sale solo con la numeración, no le inventes el nombre: la ubicación que da el SCIT suele nombrar la del
+frente; las demás quedan para confirmar con el antecedente.
 
 El mapa no da anchos de calle. En parcelas rurales o muy grandes puede no dibujar la parcela (el rectángulo rojo es
 solo su envolvente) y no hay azimuts. Si IDESF no responde, seguí la revisión y avisalo al final. Decile al usuario la
@@ -147,4 +155,4 @@ Encierra en rojo cada dato con el número del hallazgo y agrega una hoja con las
 la carpeta del cliente sin que lo pida. Si algún texto no se ubicó, avisalo.
 
 No modifiques ningún archivo del proyecto al revisar. No copies datos de clientes fuera de esta conversación (la única
-consulta externa es la de `ubicar.py` a la provincia, con la nomenclatura).
+consulta externa es la de `ubicar.py` a la provincia, con la nomenclatura o la partida).
