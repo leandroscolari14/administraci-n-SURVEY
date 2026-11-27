@@ -23,15 +23,14 @@ const APORTE_COLEGIO = 69300;
 const APORTE_CAJA_MS = 127800;
 const APORTE_COLEGIO_MS = 71000;
 
-// Lo que se sugiere según el tipo de trámite: aportes y certificado, y 1 título + 1 SET en REP y mensura simple.
-// FAC no lleva ningún gasto.
+// Lo que se sugiere según el tipo de trámite: aportes y certificado, y 1 título + 1 SET en REP, mensura simple
+// y servidumbre. FAC no lleva ningún gasto.
 const sugeridosPorTramite = (tramite: string) => {
   const tipo = tramite.toUpperCase();
   if (/\bFACS?\b/.test(tipo)) return { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0 };
-  const esMS = /\b(MSS?|MENSURAS? SIMPLES?)\b/.test(tipo);
-  const aportesMS = esMS || /\bSERV(IDUMBRES?)?\b/.test(tipo);
-  const tituloSet = esMS || tipo.includes("REP") ? 1 : 0;
-  return { caja: aportesMS ? APORTE_CAJA_MS : APORTE_CAJA, colegio: aportesMS ? APORTE_COLEGIO_MS : APORTE_COLEGIO, cantCert: 1, cantTitulo: tituloSet, cantSet: tituloSet };
+  const comoMS = /\b(MSS?|MENSURAS? SIMPLES?|SERV(IDUMBRES?)?)\b/.test(tipo);
+  const tituloSet = comoMS || tipo.includes("REP") ? 1 : 0;
+  return { caja: comoMS ? APORTE_CAJA_MS : APORTE_CAJA, colegio: comoMS ? APORTE_COLEGIO_MS : APORTE_COLEGIO, cantCert: 1, cantTitulo: tituloSet, cantSet: tituloSet };
 };
 
 // Cómo se guardan los gastos: extra_leo / extra_bruno según quién los paga. El certificado lo paga quien carga
