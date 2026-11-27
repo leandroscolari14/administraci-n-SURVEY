@@ -19,6 +19,19 @@ const GASTO_SET = 5200;
 // Aportes de un expediente (uno solo, sin importar la cantidad de lotes).
 const APORTE_CAJA = 83000;
 const APORTE_COLEGIO = 69300;
+// Mensura simple (MS) tiene aportes mínimos propios.
+const APORTE_CAJA_MS = 127800;
+const APORTE_COLEGIO_MS = 71000;
+
+// Lo que se sugiere según el tipo de trámite: aportes y certificado, y 1 título + 1 SET en REP y mensura simple.
+// FAC no lleva ningún gasto.
+const sugeridosPorTramite = (tramite: string) => {
+  const tipo = tramite.toUpperCase();
+  if (/\bFACS?\b/.test(tipo)) return { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0 };
+  const esMS = /\b(MSS?|MENSURAS? SIMPLES?)\b/.test(tipo);
+  const tituloSet = esMS || tipo.includes("REP") ? 1 : 0;
+  return { caja: esMS ? APORTE_CAJA_MS : APORTE_CAJA, colegio: esMS ? APORTE_COLEGIO_MS : APORTE_COLEGIO, cantCert: 1, cantTitulo: tituloSet, cantSet: tituloSet };
+};
 
 // Cómo se guardan los gastos: extra_leo / extra_bruno según quién los paga. El certificado lo paga quien carga
 // el expediente, el título y el SET siempre Bruno, y los extras de cada uno (viáticos, nafta, etc.) son de quien los puso.
@@ -59,7 +72,7 @@ const derivarGastos = (f: any) => {
 // Valores sugeridos al cargar: una entrega lleva aportes y gastos; un saldo va en cero.
 const valoresFinanzaPorDefecto = (tramite: string, tipoPago: string) => tipoPago === "saldo" || tipoPago === "gastos"
   ? { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0 }
-  : { caja: APORTE_CAJA, colegio: APORTE_COLEGIO, cantCert: 1, cantTitulo: tramite.toUpperCase().includes("REP") ? 1 : 0, cantSet: tramite.toUpperCase().includes("REP") ? 1 : 0, extraLeo: 0, extraBruno: 0 };
+  : { ...sugeridosPorTramite(tramite), extraLeo: 0, extraBruno: 0 };
 
 const estadoFinanzaInicial = { tramite: "VEP", propietario: "", encargado: "Leo", ingreso: 0, caja: APORTE_CAJA, colegio: APORTE_COLEGIO, tipoPago: "entrega" as "entrega" | "saldo" | "gastos", cantCert: 1, cantTitulo: 0, cantSet: 0, extraLeo: 0, extraBruno: 0, esGasto5050: false };
 
@@ -449,8 +462,16 @@ export default function DashboardAgrimensura() {
   
   const actualizarValoresFinanza = (campo: string, valor: string) => {
     const siguiente: any = { ...nuevaFinanza, [campo]: valor };
-    // Al cargar un expediente nuevo, el título y el SET se sugieren solos en los REP (y no en un saldo).
-    if (campo === 'tramite' && !editandoFinanzaId && nuevaFinanza.tipoPago === "entrega") { const esREP = valor.toUpperCase().includes("REP"); siguiente.cantTitulo = esREP ? 1 : 0; siguiente.cantSet = esREP ? 1 : 0; }
+    // Al cargar un expediente nuevo, los aportes y los gastos se sugieren según el tipo (y no en un saldo).
+    if (campo === 'tramite' && !editandoFinanzaId && nuevaFinanza.tipoPago === "entrega") {
+      const antes = sugeridosPorTramite(nuevaFinanza.tramite), ahora = sugeridosPorTramite(valor);
+      siguiente.cantTitulo = ahora.cantTitulo;
+      siguiente.cantSet = ahora.cantSet;
+      // Aportes y certificado solo se pisan si cambia lo sugerido, para no borrar lo cargado a mano.
+      if (ahora.cantCert !== antes.cantCert) siguiente.cantCert = ahora.cantCert;
+      if (ahora.caja !== antes.caja) siguiente.caja = ahora.caja;
+      if (ahora.colegio !== antes.colegio) siguiente.colegio = ahora.colegio;
+    }
     setNuevaFinanza(siguiente);
   };
 
