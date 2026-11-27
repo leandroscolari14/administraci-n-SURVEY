@@ -1,6 +1,6 @@
 ---
 name: revisar-plano
-description: Revisa un plano de mensura en PDF buscando errores de concordancia, elementos faltantes y errores de tipeo, y lo contrasta con la escritura y el set de datos (Informe Catastral) si se pasan. Usar cuando el usuario pida revisar un plano de mensura o pase la ruta de un plano, o pida las calles o la ubicación de una partida o parcela.
+description: Revisa un plano de mensura en PDF buscando errores de concordancia, elementos faltantes y errores de tipeo, y lo contrasta con la escritura y el set de datos (Informe Catastral) si se pasan. Usar cuando el usuario pida revisar un plano de mensura o pase la ruta de un plano, pida revisar un FAC (Formulario de Actualización de Construcciones), o pida las calles o la ubicación de una partida o parcela.
 argument-hint: <plano.pdf> [escritura.pdf] [set-de-datos.pdf]
 ---
 
@@ -22,7 +22,8 @@ python -I -X utf8 .claude/skills/revisar-plano/extraer.py <carpeta_temporal> <pl
 
 Genera, por cada PDF, `<nombre>.txt` (texto), `<nombre>_bloques.txt` (bloques con posición), `<nombre>_p1.png` (hoja
 completa) y, en el plano, seis recortes ampliados `<nombre>_p1_c1..c6.png` para leer el texto chico. Una escritura
-escaneada no tiene texto: se lee mirando sus imágenes.
+escaneada no tiene texto: se lee mirando sus imágenes. Si hay un FAC, extraelo aparte (como primer archivo y en otra
+subcarpeta) para tener también sus recortes.
 
 ## 2. Leer todo antes de opinar
 
@@ -130,6 +131,26 @@ comparte un lado.
 La fecha del dominio (y el resto de los datos de inscripción) vale la que figura en la escritura: el folio y el set
 pueden estar mal. Si el plano coincide con la escritura, no lo marques aunque el set o el folio digan otra cosa.
 
+### FAC (Formulario de Actualización de Construcciones)
+
+Si en la carpeta o en los argumentos hay un FAC (suele llamarse `…-FAC.pdf`: croquis de bloques, foto de fachada y
+planilla de superficie de las mejoras), revisalo junto con el plano, o solo si es lo único que piden.
+
+- **Datos:** lote, manzana y plano; partida; propietario y porcentaje contra el folio o el título; ubicación y número
+  contra el folio y la chapa de la foto; lugar y fecha.
+- **Sumas, rehechas todas:** la superficie de cada bloque a partir de sus medidas (cubierta, semicubierta en la columna
+  S/CUBIERTA, que puede incluir voladizos, y pileta); si el polígono es irregular, calculala con las líneas del PDF
+  (`page.get_drawings()` de pymupdf). Cada fila tiene que estar rotulada con el bloque del croquis. Después los
+  subtotales por columna, el total existente, la superficie empadronada (la suma de las mejoras del folio) y la
+  diferencia con su sentido (en más o en menos). La planilla redondea al m²: el redondeo no se marca.
+- **Croquis:** las medidas de cada bloque tienen que cerrar entre sí y con las de la parcela.
+- **Contra el plano:** las mismas construcciones (retiros, entrantes, voladizos), las mismas medidas y el norte girado
+  igual (medilo en los dos). Si una diferencia cambia una superficie redondeada, mostrá cómo quedarían las cuentas.
+- **Foto de fachada:** que esté, que sea de ese inmueble y que se vea bien en el PDF (colores degradados o manchas es un
+  hallazgo de presentación; compará con la foto original si está en la carpeta).
+- No tenemos la norma del FAC: no exijas campos que no sepas que son obligatorios (el "Nro." en blanco no se marca) y
+  decilo al final.
+
 ## 4. Responder
 
 En español rioplatense, en este orden:
@@ -139,6 +160,9 @@ En español rioplatense, en este orden:
    cuenta y, si es contra un documento, lo que dice cada uno, textual. Temas: concordancia, faltante, tipeo, presentación,
    contra la escritura / set, verificar contra el título.
 4. Si algo no se pudo leer o falta un documento para comprobar un dato, decilo al final.
+
+Con un FAC, antes de los hallazgos poné una tabla con cada suma: control, cuenta y lo que dice el FAC. Indicá en cada
+hallazgo si es del plano o del FAC.
 
 ## 5. PDF con las observaciones en rojo
 
@@ -151,7 +175,7 @@ python -I -X utf8 .claude/skills/revisar-plano/marcar.py <plano.pdf> <carpeta_te
 ```
 
 Encierra en rojo cada dato con el número del hallazgo y agrega una hoja con las observaciones. Si hay varios planos
-(varios lotes), un PDF por plano con sus propios hallazgos. Decile al usuario la ruta completa del PDF; no lo copies a
+(varios lotes) o un FAC, un PDF por documento con sus propios hallazgos. Decile al usuario la ruta completa del PDF; no lo copies a
 la carpeta del cliente sin que lo pida. Si algún texto no se ubicó, avisalo.
 
 No modifiques ningún archivo del proyecto al revisar. No copies datos de clientes fuera de esta conversación (la única

@@ -37,8 +37,8 @@ lista = doc.new_page(width=w, height=h)
 lista.insert_text(fitz.Point(40, 50), "OBSERVACIONES", fontsize=16, color=ROJO, fontname="hebo")
 y = 80
 for o in obs:
-    r = lista.insert_textbox(fitz.Rect(40, y, w - 40, y + 200), f'{o["n"]}. {o["nota"]}', fontsize=10, color=ROJO)
-    lineas = max(1, int(len(o["nota"]) / 140) + 1)
-    y += 14 * lineas + 8
+    caja = fitz.Rect(40, y, w - 40, y + 200)
+    sobra = lista.insert_textbox(caja, f'{o["n"]}. {o["nota"]}', fontsize=10, color=ROJO)
+    y += caja.height - sobra + 8   # alto que ocupó el texto, según el ancho de la hoja
 doc.save(salida)
 print("guardado", salida, "| sin ubicar en el dibujo:", no_hallados)
