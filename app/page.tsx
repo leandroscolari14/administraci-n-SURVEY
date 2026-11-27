@@ -19,7 +19,7 @@ const GASTO_SET = 5200;
 // Aportes de un expediente (uno solo, sin importar la cantidad de lotes).
 const APORTE_CAJA = 83000;
 const APORTE_COLEGIO = 69300;
-// Mensura simple (MS) tiene aportes mínimos propios.
+// Mensura simple (MS) y servidumbre tienen aportes mínimos propios.
 const APORTE_CAJA_MS = 127800;
 const APORTE_COLEGIO_MS = 71000;
 
@@ -29,8 +29,9 @@ const sugeridosPorTramite = (tramite: string) => {
   const tipo = tramite.toUpperCase();
   if (/\bFACS?\b/.test(tipo)) return { caja: 0, colegio: 0, cantCert: 0, cantTitulo: 0, cantSet: 0 };
   const esMS = /\b(MSS?|MENSURAS? SIMPLES?)\b/.test(tipo);
+  const aportesMS = esMS || /\bSERV(IDUMBRES?)?\b/.test(tipo);
   const tituloSet = esMS || tipo.includes("REP") ? 1 : 0;
-  return { caja: esMS ? APORTE_CAJA_MS : APORTE_CAJA, colegio: esMS ? APORTE_COLEGIO_MS : APORTE_COLEGIO, cantCert: 1, cantTitulo: tituloSet, cantSet: tituloSet };
+  return { caja: aportesMS ? APORTE_CAJA_MS : APORTE_CAJA, colegio: aportesMS ? APORTE_COLEGIO_MS : APORTE_COLEGIO, cantCert: 1, cantTitulo: tituloSet, cantSet: tituloSet };
 };
 
 // Cómo se guardan los gastos: extra_leo / extra_bruno según quién los paga. El certificado lo paga quien carga
